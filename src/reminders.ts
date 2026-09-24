@@ -2,6 +2,7 @@
 // 서버가 없으므로 앱이 꺼져 있을 때 확실히 울리는 건 캘린더 알림이다.
 
 import { store, type Memo, type Todo } from "./store";
+import { isNative, postNative } from "./bridge";
 
 export type Due = { kind: "link"; memo: Memo; at: number } | { kind: "todo"; todo: Todo; at: number };
 
@@ -94,6 +95,8 @@ const icsText = (s: string) => s.replace(/[\;,]/g, (c) => `\\${c}`).replace(/\n/
 
 /** 알림이 달린 캘린더 일정 파일. 아이폰·맥·윈도 캘린더가 그대로 연다 */
 export function downloadIcs(title: string, at: number, opts: { url?: string; note?: string } = {}) {
+  // 아이폰 앱 안에서는 파일 대신 기본 캘린더 편집 화면을 띄운다
+  if (isNative()) return postNative({ type: "calendar", title, at, url: opts.url ?? null, note: opts.note ?? null });
   const lines = [
     "BEGIN:VCALENDAR",
     "VERSION:2.0",

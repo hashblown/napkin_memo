@@ -10,6 +10,7 @@ import { $, esc, toast, memoItem, dueLabel, onRerender } from "./ui";
 import { renderTodos } from "./views/todos";
 import { renderLinks } from "./views/links";
 import { renderDrawer } from "./views/drawer";
+import { initNative } from "./native";
 
 const PRESETS = ["글이 막힐 때", "기획 회의 전", "새 프로젝트를 시작할 때", "마음이 지칠 때", "산책하며 생각 정리", "아무거나 꺼내줘"];
 const DAY = 86_400_000;
@@ -292,6 +293,9 @@ if (quick) {
   ["q", "title", "text", "url"].forEach((k) => params.delete(k));
   history.replaceState(null, "", `${location.pathname}${params.size ? `?${params}` : ""}`);
 }
+
+// 아이폰 앱 안이면 위젯·알림과 연결
+initNative();
 
 // 리마인드: 1분마다, 그리고 앱으로 돌아올 때 확인
 function tick() {

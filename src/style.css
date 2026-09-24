@@ -255,3 +255,8 @@ details summary { cursor: pointer; color: var(--muted); font-size: 13px; margin:
 .memo.locked { border-style: dashed; }
 .lock { font-size: 12px; }
 #pinForm input { min-width: 0; }
+
+/* 아이폰 앱 안: 웹 전용 안내 숨김 */
+.native-only { display: none; }
+body.native .native-only { display: block; }
+body.native .web-only { display: none; }

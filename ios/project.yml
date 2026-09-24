@@ -1,0 +1,102 @@
+# XcodeGen 설정: `xcodegen` 을 실행하면 Napkin.xcodeproj 가 만들어진다
+name: Napkin
+options:
+  bundleIdPrefix: com.hashblown
+  deploymentTarget:
+    iOS: "17.0"
+  createIntermediateGroups: true
+
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    # Xcode › Settings › Accounts 에서 보이는 Team ID 를 넣거나, 생성 후 Xcode에서 팀을 고른다
+    DEVELOPMENT_TEAM: ""
+    CODE_SIGN_STYLE: Automatic
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+
+targets:
+  Napkin:
+    type: application
+    platform: iOS
+    sources:
+      - App
+      - Shared
+    info:
+      path: App/Info.plist
+      properties:
+        CFBundleDisplayName: 냅킨
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        # 앱 안에 띄울 웹앱 주소
+        NapkinWebURL: https://hashblown.github.io/napkin_memo/
+        CFBundleURLTypes:
+          - CFBundleURLName: com.hashblown.napkin
+            CFBundleURLSchemes: [napkin]
+        UILaunchScreen:
+          UIColorName: LaunchBackground
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
+        NSCalendarsWriteOnlyAccessUsageDescription: 할 일과 리마인드를 캘린더에 넣을 때 사용해요.
+    entitlements:
+      path: App/Napkin.entitlements
+      properties:
+        com.apple.security.application-groups: [group.com.hashblown.napkin]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.hashblown.napkin
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        TARGETED_DEVICE_FAMILY: "1"
+    dependencies:
+      - target: NapkinWidgets
+      - target: NapkinShare
+
+  NapkinWidgets:
+    type: app-extension
+    platform: iOS
+    sources:
+      - Widgets
+      - Shared
+    info:
+      path: Widgets/Info.plist
+      properties:
+        CFBundleDisplayName: 냅킨 위젯
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    entitlements:
+      path: Widgets/NapkinWidgets.entitlements
+      properties:
+        com.apple.security.application-groups: [group.com.hashblown.napkin]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.hashblown.napkin.widgets
+        TARGETED_DEVICE_FAMILY: "1"
+
+  NapkinShare:
+    type: app-extension
+    platform: iOS
+    sources:
+      - Share
+      - Shared
+    info:
+      path: Share/Info.plist
+      properties:
+        CFBundleDisplayName: 냅킨
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.share-services
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).ShareViewController
+          NSExtensionAttributes:
+            NSExtensionActivationRule:
+              NSExtensionActivationSupportsWebURLWithMaxCount: 1
+              NSExtensionActivationSupportsText: true
+    entitlements:
+      path: Share/NapkinShare.entitlements
+      properties:
+        com.apple.security.application-groups: [group.com.hashblown.napkin]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.hashblown.napkin.share
+        TARGETED_DEVICE_FAMILY: "1"
