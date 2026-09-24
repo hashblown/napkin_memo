@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>냅킨 메모</title>
+    <meta name="description" content="떠오른 생각을 냅킨처럼 적고, 알아서 분류하고, 필요할 때 꺼내주는 메모" />
+    <meta name="theme-color" content="#f6f1e7" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#1d1b18" media="(prefers-color-scheme: dark)" />
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="icon" href="./icon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="./icon-180.png" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="냅킨" />
+  </head>
+  <body>
+    <div id="app">
+      <header class="top">
+        <h1>냅킨</h1>
+        <nav class="tabs" role="tablist">
+          <button data-tab="write" class="on">적기</button>
+          <button data-tab="drawer">서랍</button>
+          <button data-tab="inspire">영감</button>
+          <button data-tab="settings" aria-label="설정">⚙︎</button>
+        </nav>
+      </header>
+
+      <section id="write" class="panel on">
+        <form id="capture">
+          <textarea id="napkin" placeholder="방금 떠오른 거, 그냥 적어요…" rows="4" autofocus></textarea>
+          <div class="row">
+            <span class="hint">Enter 저장 · Shift+Enter 줄바꿈</span>
+            <button type="submit" class="primary">적기</button>
+          </div>
+        </form>
+        <ul id="recent" class="memos"></ul>
+      </section>
+
+      <section id="drawer" class="panel">
+        <input id="search" type="search" placeholder="찾기" />
+        <div id="cats" class="chips"></div>
+        <ul id="list" class="memos"></ul>
+      </section>
+
+      <section id="inspire" class="panel">
+        <form id="ask">
+          <input id="situation" placeholder="지금 어떤 상황이에요? (예: 발표 오프닝이 안 떠올라)" />
+          <button type="submit" class="primary">꺼내줘</button>
+        </form>
+        <div id="presets" class="chips"></div>
+        <div id="spark"></div>
+        <ul id="picks" class="memos"></ul>
+      </section>
+
+      <section id="settings" class="panel">
+        <h2>AI 분류 · 영감</h2>
+        <p class="muted">
+          Anthropic API 키를 넣으면 Claude가 메모를 분류하고 영감을 골라줘요. 키는 이 기기에만 저장돼요.
+          없으면 기기 안의 간단한 규칙으로 동작해요.
+        </p>
+        <form id="keyform" class="row">
+          <input id="apikey" type="password" placeholder="sk-ant-…" autocomplete="off" />
+          <button type="submit">저장</button>
+        </form>
+        <button id="reclassify">규칙으로 분류된 메모를 AI로 다시 분류</button>
+
+        <h2>기기 옮기기 · 백업</h2>
+        <div class="row">
+          <button id="export">내보내기</button>
+          <label class="button">가져오기<input id="import" type="file" accept="application/json" hidden /></label>
+        </div>
+
+        <h2>빠르게 적기</h2>
+        <p class="muted">
+          이 주소 뒤에 <code>?q=메모내용</code>을 붙여 열면 바로 저장돼요. 아이폰 단축어 위젯이나 데스크탑 단축키에 연결해 쓰세요.
+          작은 위젯 창은 <code>?widget</code>으로 열어요.
+        </p>
+      </section>
+    </div>
+    <div id="toast" role="status"></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

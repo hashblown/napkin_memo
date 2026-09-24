@@ -1,0 +1,134 @@
+:root {
+  --paper: #f6f1e7;
+  --card: #fffdf8;
+  --ink: #2a2723;
+  --muted: #8a8278;
+  --line: #e4dccd;
+  --accent: #c8553d;
+  --accent-ink: #fff;
+  --chip: #efe7d8;
+  color-scheme: light dark;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --paper: #1d1b18;
+    --card: #282521;
+    --ink: #ece6dc;
+    --muted: #9a9185;
+    --line: #3a352f;
+    --accent: #e0765d;
+    --chip: #34302a;
+  }
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font: 15px/1.55 -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Pretendard", "Noto Sans KR", sans-serif;
+  -webkit-text-size-adjust: 100%;
+}
+#app {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: max(12px, env(safe-area-inset-top)) 16px calc(24px + env(safe-area-inset-bottom));
+}
+
+button, .button, input, textarea { font: inherit; color: inherit; }
+button, .button {
+  background: var(--chip);
+  border: 0;
+  border-radius: 10px;
+  padding: 8px 14px;
+  cursor: pointer;
+}
+button.primary { white-space: nowrap; background: var(--accent); color: var(--accent-ink); font-weight: 600; }
+input, textarea {
+  width: 100%;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 10px 12px;
+  outline: none;
+}
+input:focus, textarea:focus { border-color: var(--accent); }
+
+.top { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.top h1 { font-size: 20px; margin: 0; letter-spacing: -0.02em; }
+.tabs { display: flex; gap: 4px; }
+.tabs button { background: transparent; padding: 6px 10px; color: var(--muted); }
+.tabs button.on { background: var(--chip); color: var(--ink); font-weight: 600; }
+
+.panel { display: none; }
+.panel.on { display: block; }
+.row { display: flex; gap: 8px; align-items: center; justify-content: space-between; margin-top: 8px; }
+.row input { flex: 1; }
+.muted, .hint { color: var(--muted); font-size: 13px; }
+h2 { font-size: 15px; margin: 24px 0 6px; }
+code { background: var(--chip); padding: 1px 5px; border-radius: 5px; font-size: 12px; }
+
+/* 냅킨: 살짝 결이 있는 종이 */
+#napkin {
+  min-height: 120px;
+  resize: vertical;
+  font-size: 17px;
+  background:
+    repeating-linear-gradient(0deg, transparent 0 27px, color-mix(in srgb, var(--line) 60%, transparent) 27px 28px),
+    var(--card);
+  line-height: 28px;
+  padding-top: 6px;
+}
+
+#ask { display: flex; gap: 8px; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0; }
+.chip { padding: 5px 11px; border-radius: 999px; font-size: 13px; }
+.chip.on { background: var(--ink); color: var(--paper); }
+
+.memos { list-style: none; padding: 0; margin: 14px 0 0; display: grid; gap: 8px; }
+.memo {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 10px 12px;
+}
+.memo p { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.memo .reason { margin-top: 6px; color: var(--accent); font-size: 13px; }
+.meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 6px; font-size: 12px; color: var(--muted); }
+.cat { padding: 2px 8px; border-radius: 999px; background: var(--chip); font-size: 12px; color: var(--ink); }
+.cat.pending { color: var(--muted); }
+.tag { color: var(--muted); }
+.time { margin-left: auto; }
+.del { background: transparent; padding: 0 4px; color: var(--muted); font-size: 16px; line-height: 1; }
+.empty { color: var(--muted); text-align: center; padding: 24px; }
+
+.spark {
+  margin-top: 12px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--accent) 12%, var(--card));
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--line));
+}
+
+#toast {
+  position: fixed;
+  left: 50%;
+  bottom: calc(20px + env(safe-area-inset-bottom));
+  transform: translate(-50%, 20px);
+  max-width: calc(100% - 32px);
+  background: var(--ink);
+  color: var(--paper);
+  padding: 8px 14px;
+  border-radius: 10px;
+  font-size: 13px;
+  opacity: 0;
+  pointer-events: none;
+  transition: 0.2s;
+}
+#toast.show { opacity: 1; transform: translate(-50%, 0); }
+
+/* 위젯 모드: 작은 창에서 적기만 */
+body.widget #app { padding: 10px; }
+body.widget .top h1, body.widget .hint { display: none; }
+body.widget #napkin { min-height: 84px; }
+body.widget #capture .row { justify-content: flex-end; }
