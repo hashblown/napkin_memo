@@ -44,6 +44,19 @@
       <section id="drawer" class="panel">
         <input id="search" type="search" placeholder="찾기" />
         <div id="cats" class="chips"></div>
+        <div class="row tools">
+          <div class="row">
+            <button id="addcat">+ 새 분류</button>
+            <button id="renamecat" hidden>이름 바꾸기</button>
+          </div>
+          <button id="reorg" class="primary">정리 제안 받기</button>
+        </div>
+        <form id="catform" class="row" hidden>
+          <input id="catname" placeholder="분류 이름" autocomplete="off" />
+          <button type="submit" class="primary">저장</button>
+          <button type="button" id="catcancel">취소</button>
+        </form>
+        <div id="reorgbox" class="reorg" hidden></div>
         <ul id="list" class="memos"></ul>
       </section>
 

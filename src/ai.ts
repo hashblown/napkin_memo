@@ -88,3 +88,42 @@ export async function inspire(apiKey: string, situation: string, memos: Memo[]) 
     spark: res.parsed_output.spark,
   };
 }
+
+const Reorg = z.object({
+  newCategories: z
+    .array(z.object({ name: z.string().describe("짧은 한국어 분류명 (2~6글자)"), reason: z.string().describe("메모들에서 어떤 경향을 봤는지 한 문장") }))
+    .describe("새로 만들면 좋을 분류 0~3개. 여러 메모에 반복되는 주제·관심사가 뚜렷할 때만"),
+  moves: z
+    .array(z.object({ id: z.string(), to: z.string().describe("기존 분류 또는 newCategories의 이름"), reason: z.string().describe("짧은 이유") }))
+    .describe("분류를 옮기면 더 잘 맞는 메모들. 현재 분류가 적절하면 넣지 않는다"),
+});
+
+export type ReorgSuggestion = z.infer<typeof Reorg>;
+
+/** 전체 메모의 경향을 보고 새 분류와 재분류를 제안한다. 사용자가 직접 정한 메모(locked)는 옮기지 않는다 */
+export async function suggestReorg(apiKey: string, memos: Memo[], categories: string[]): Promise<ReorgSuggestion> {
+  const catalog = memos
+    .map((m) => JSON.stringify({ id: m.id, text: m.text, category: m.category, tags: m.tags, locked: m.classifiedBy === "user" }))
+    .join("\n");
+  const res = await client(apiKey).beta.messages.parse({
+    model: MODEL,
+    max_tokens: 16000,
+    output_config: { effort: "medium", format: betaZodOutputFormat(Reorg) },
+    ...FALLBACK,
+    system:
+      "사용자가 쌓아온 메모 전체를 보고 분류 체계를 다듬는 조수다. " +
+      "여러 메모에 걸쳐 반복되는 주제나 관심사가 보이면 새 분류를 제안하고, 지금 분류보다 더 잘 맞는 곳이 있는 메모는 옮기자고 제안한다. " +
+      "분류를 잘게 쪼개지 말고, 확신이 있을 때만 제안한다. locked가 true인 메모는 사용자가 직접 정한 것이니 옮기지 않는다. 한국어로 답한다.",
+    messages: [
+      {
+        role: "user",
+        content: `현재 분류: ${categories.join(", ") || "(없음)"}\n\n메모 목록 (JSON lines):\n${catalog}`,
+      },
+    ],
+  });
+  if (res.stop_reason === "refusal" || !res.parsed_output) throw new Error("정리 제안을 만들지 못했어요.");
+  const ids = new Set(memos.filter((m) => m.classifiedBy !== "user").map((m) => m.id));
+  const current = new Map(memos.map((m) => [m.id, m.category]));
+  const out = res.parsed_output;
+  return { ...out, moves: out.moves.filter((mv) => ids.has(mv.id) && current.get(mv.id) !== mv.to) };
+}

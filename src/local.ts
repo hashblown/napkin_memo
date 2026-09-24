@@ -55,3 +55,24 @@ export function inspireLocally(situation: string, memos: Memo[], n = 4): Found[]
   if (wild) picks.push({ memo: wild.memo, reason: "엉뚱한 조합이 새 생각을 부를 때가 있어요." });
   return picks;
 }
+
+/** 로컬 정리 제안: 서로 다른 분류에 걸쳐 2번 이상 나온 키워드를 새 분류 후보로 */
+export function suggestReorgLocally(memos: Memo[], categories: string[]) {
+  const byTag = new Map<string, Memo[]>();
+  for (const m of memos) for (const t of m.tags) byTag.set(t, [...(byTag.get(t) ?? []), m]);
+  const newCategories: { name: string; reason: string }[] = [];
+  const moves: { id: string; to: string; reason: string }[] = [];
+  const moved = new Set<string>();
+  const ranked = [...byTag.entries()].sort((a, b) => b[1].length - a[1].length);
+  for (const [tag, ms] of ranked) {
+    const cats = new Set(ms.map((m) => m.category));
+    if (ms.length < 2 || cats.size < 2 || categories.includes(tag) || newCategories.length >= 3) continue;
+    newCategories.push({ name: tag, reason: `서로 다른 분류(${[...cats].join(", ")})에 '${tag}' 이야기가 ${ms.length}번 나와요.` });
+    for (const m of ms) {
+      if (m.classifiedBy === "user" || moved.has(m.id)) continue;
+      moved.add(m.id);
+      moves.push({ id: m.id, to: tag, reason: `#${tag}` });
+    }
+  }
+  return { newCategories, moves };
+}
