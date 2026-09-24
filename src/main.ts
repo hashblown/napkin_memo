@@ -310,7 +310,13 @@ if ("serviceWorker" in navigator && import.meta.env.PROD && !import.meta.env.VIT
 
 function seedDemo() {
   document.body.classList.add("demo");
-  if (store.all().length) return;
+  // 예전 미리보기를 연 적이 있어도 새 예시(북마크·할 일·연재·보관함)는 한 번 더 넣는다
+  try {
+    if (localStorage.getItem("napkin.demo.v3")) return;
+    localStorage.setItem("napkin.demo.v3", "1");
+  } catch {
+    if (store.all().length) return;
+  }
   const H = 3600_000;
   const now = Date.now();
   const add = (hoursAgo: number, init: Parameters<typeof store.add>[0]) => store.add({ classifiedBy: "local", createdAt: now - hoursAgo * H, ...init });
