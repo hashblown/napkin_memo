@@ -35,25 +35,17 @@
     <!-- 모서리 하나를 접은 냅킨 -->
     <path d="M120 120 H392 V280 L280 392 H120 Z" fill="url(#body)" filter="url(#lift)"/>
     <path d="M256 124 V388 M124 256 H388" stroke="#e2d2b4" stroke-width="2.5" opacity="0.7"/>
-    <path d="M142 142 H370 V270 M270 370 H142 V142" fill="none" stroke="#d8c5a3" stroke-width="6" stroke-linecap="round" stroke-dasharray="0 15"/>
 
-    <!-- 볼펜 낙서: 번뜩이는 전구 -->
-    <g fill="none" stroke="#2446a8" stroke-linecap="round" stroke-linejoin="round">
-      <!-- 유리구 (두 번 그은 듯 삐뚤게) -->
-      <path stroke-width="7" d="M210 270 C188 254 173 231 175 205 C178 168 207 147 239 148 C273 150 299 173 297 207 C295 233 281 251 265 268"/>
-      <path stroke-width="3" opacity="0.5" d="M206 266 C186 248 177 226 180 202 C185 170 211 152 242 153 C270 156 293 178 291 209 C289 230 277 247 262 263"/>
+    <!-- 볼펜 낙서: 간결한 전구 (냅킨 안쪽 136~310 범위) -->
+    <g fill="none" stroke="#2446a8" stroke-width="8" stroke-linecap="round" stroke-linejoin="round">
+      <!-- 유리구 + 목: 한 획 -->
+      <path d="M217 292 C217 275 197 266 189 246 C180 224 185 199 203 186 C222 172 259 173 277 187 C295 201 299 225 291 246 C283 265 264 275 263 292"/>
       <!-- 필라멘트 -->
-      <path stroke-width="5" d="M220 268 L225 238 Q230 226 236 239 Q242 226 248 238 L254 267"/>
-      <!-- 목과 소켓 -->
-      <path stroke-width="7" d="M211 272 L213 297 M265 269 L262 296"/>
-      <path stroke-width="6" d="M205 298 Q236 305 268 296 M208 312 Q236 318 265 310 M216 325 Q237 332 257 323"/>
-      <path stroke-width="6" d="M229 336 Q237 342 245 335"/>
+      <path stroke-width="6" d="M229 291 V272 Q240 254 251 272 V291"/>
+      <!-- 소켓 -->
+      <path d="M215 305 Q240 311 265 304 M224 320 Q240 325 256 319"/>
       <!-- 반짝 -->
-      <path stroke-width="7" d="M238 131 L237 108 M183 150 L167 134 M292 150 L308 133 M160 207 L138 208 M316 207 L338 205"/>
-      <!-- 반짝 옆 작은 별 -->
-      <path stroke-width="5" d="M330 150 l6 14 l14 3 l-12 7 l2 14 l-10 -9 l-12 5 l6 -13 l-8 -11 l14 1 z"/>
-      <!-- 밑줄 휘갈김 -->
-      <path stroke-width="5" opacity="0.85" d="M150 356 q12 -12 24 0 t24 0 t22 -2"/>
+      <path stroke-width="7" d="M240 158 V143 M195 172 L185 162 M285 172 L295 162"/>
     </g>
 
     <!-- 접힌 모서리 -->
