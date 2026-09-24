@@ -1,7 +1,6 @@
 // 할 일: 기한 있는 것은 기한 순서대로 + 리마인드, 기한 없는 것은 하나씩 '첫 행동'을 제안
 
 import { store, settings, type Todo } from "../store";
-import { parseDue } from "../detect";
 import { nextStep, describeError } from "../ai";
 import { downloadIcs } from "../reminders";
 import { $, esc, toast, dueLabel } from "../ui";
@@ -80,24 +79,13 @@ export function renderTodos() {
     section("기한 있음", dated) +
     section("기한 없음", undated) +
     (done.length ? `<details><summary>완료한 일 ${done.length}</summary><ul class="todos">${done.map((t) => todoItem(t, now)).join("")}</ul></details>` : "") ||
-    `<p class="empty">할 일이 없어요. 적기 탭에 "금요일까지 서류 제출"처럼 적으면 여기로 모여요.</p>`;
+    `<p class="empty">할 일이 없어요.<br />냅킨에 "금요일까지 서류 내기"처럼 적으면 알아서 여기로 모여요.</p>`;
   const overdue = open.filter((t) => t.due && t.due <= now).length;
   const badge = $("#todoBadge");
   badge.hidden = !overdue;
   badge.textContent = String(overdue);
   renderStep();
 }
-
-$<HTMLFormElement>("#todoForm").addEventListener("submit", (e) => {
-  e.preventDefault();
-  const input = $<HTMLInputElement>("#todoInput");
-  const title = input.value.trim();
-  if (!title) return;
-  const d = parseDue(title);
-  store.addTodo({ title, due: d?.due ?? null, hasTime: d?.hasTime ?? false });
-  input.value = "";
-  toast(d ? `${dueLabel(d.due, d.hasTime)}에 알려드릴게요` : "할 일에 넣었어요");
-});
 
 document.addEventListener("click", (e) => {
   const el = (e.target as HTMLElement).closest<HTMLElement>("[data-todo-done],[data-todo-del],[data-ics],[data-step-next],[data-step-later]");

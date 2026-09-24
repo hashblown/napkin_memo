@@ -49,6 +49,8 @@ export interface Todo {
 
 export interface Settings {
   apiKey: string;
+  /** 냅킨 입력칸 글씨체 (fonts.ts의 id) */
+  font?: string;
 }
 
 const MEMOS_KEY = "napkin.memos.v1";
@@ -56,6 +58,7 @@ const TODOS_KEY = "napkin.todos.v1";
 const SETTINGS_KEY = "napkin.settings.v1";
 const CATS_KEY = "napkin.categories.v1";
 const LOCKED_CATS_KEY = "napkin.lockedCategories.v1";
+const SERIES_KEY = "napkin.series.v1";
 
 export const VAULT = "보관함";
 
@@ -81,6 +84,8 @@ let todos: Todo[] = read<Todo[]>(TODOS_KEY, []);
 /** 사용자가 직접 만든 분류 (아직 메모가 없어도 유지) */
 let userCats: string[] = read<string[]>(CATS_KEY, []);
 let lockedCats: string[] = read<string[]>(LOCKED_CATS_KEY, [VAULT]);
+/** 사용자가 만든 연재 (아직 기록이 없어도 유지) */
+let seriesDefs: { name: string; unit: string }[] = read(SERIES_KEY, []);
 const listeners = new Set<() => void>();
 
 function commit() {
@@ -88,6 +93,7 @@ function commit() {
   write(TODOS_KEY, todos);
   write(CATS_KEY, userCats);
   write(LOCKED_CATS_KEY, lockedCats);
+  write(SERIES_KEY, seriesDefs);
   listeners.forEach((fn) => fn());
 }
 
@@ -157,8 +163,16 @@ export const store = {
   },
 
   // ---------- 연재 ----------
+  /** 새 연재 만들기: 같은 이름의 분류도 함께 만든다 */
+  addSeries(name: string, unit: string) {
+    if (!seriesDefs.some((s) => s.name === name)) seriesDefs = [...seriesDefs, { name, unit }];
+    if (!userCats.includes(name)) userCats = [...userCats, name];
+    commit();
+  },
   seriesList() {
-    const map = new Map<string, { name: string; last: number; unit: string; count: number; lastAt: number }>();
+    const map = new Map<string, { name: string; last: number; unit: string; count: number; lastAt: number }>(
+      seriesDefs.map((d) => [d.name, { name: d.name, last: 0, unit: d.unit, count: 0, lastAt: 0 }]),
+    );
     for (const m of memos) {
       if (!m.series) continue;
       const s = map.get(m.series.name) ?? { name: m.series.name, last: 0, unit: m.series.unit, count: 0, lastAt: 0 };
@@ -211,5 +225,6 @@ export const store = {
 
 export const settings = {
   get: () => read<Settings>(SETTINGS_KEY, { apiKey: "" }),
-  set: (s: Settings) => write(SETTINGS_KEY, s),
+  /** 바꾼 항목만 넘기면 나머지는 유지된다 */
+  set: (patch: Partial<Settings>) => write(SETTINGS_KEY, { ...settings.get(), ...patch }),
 };

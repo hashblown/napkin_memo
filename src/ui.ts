@@ -51,7 +51,7 @@ export function memoItem(m: Memo, reason?: string) {
   if (text === null) body = `<p class="muted">잠긴 메모예요. 서랍 › ${esc(m.category)}에서 PIN으로 열 수 있어요.</p>`;
   else if (m.kind === "link" && m.link)
     body = `<a class="ltitle" href="${esc(m.link.url)}" target="_blank" rel="noopener">🔗 ${esc(m.link.title || m.link.site)}</a>
-      ${m.link.summary ? `<p class="lsum">${esc(m.link.summary)}</p>` : ""}${text ? `<p>${esc(text)}</p>` : ""}`;
+      ${m.link.summary ? `<p class="lsum">${esc(m.link.summary)}</p>` : ""}${text && text !== m.link.title ? `<p>${esc(text)}</p>` : ""}`;
   else body = `<p>${esc(text)}</p>`;
   return `<li class="memo${m.locked ? " locked" : ""}" data-id="${m.id}">
     ${body}

@@ -50,7 +50,7 @@ export function renderLinks() {
     // 리마인드 걸린 것을 위로
     .sort((a, b) => Number(!!b.remindAt && !b.reminded) - Number(!!a.remindAt && !a.reminded) || b.createdAt - a.createdAt);
   $("#linkList").innerHTML =
-    list.map(linkItem).join("") || `<li class="empty">링크를 적기 탭에 붙여넣으면 여기로 모여요. 공유 버튼으로도 바로 담을 수 있어요.</li>`;
+    list.map(linkItem).join("") || `<li class="empty">냅킨에 링크를 붙여넣으면 여기로 모여요.<br />무슨 페이지인지 알아서 분류해 둘게요.</li>`;
 }
 
 $("#linkCats").addEventListener("click", (e) => {

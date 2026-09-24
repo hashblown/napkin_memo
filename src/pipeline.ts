@@ -58,7 +58,8 @@ export async function classifyNote(m: Memo) {
     try {
       const cats = store.categories("note").filter((c) => c !== "미분류" && !store.isLockedCat(c));
       const r = await classify(settings.get().apiKey, m.text, cats);
-      store.update(m.id, { category: r.category, tags: r.tags, useWhen: r.useWhen, classifiedBy: "ai" });
+      store.update(m.id, { category: m.series?.name ?? r.category, tags: r.tags, useWhen: r.useWhen, classifiedBy: "ai" });
+      if (m.series) return; // 연습·수업 일지는 할 일로 뽑지 않는다
       replaceTodos(
         m,
         r.todos.map((t) => {
@@ -71,8 +72,9 @@ export async function classifyNote(m: Memo) {
       toast(`AI 분류 실패: ${describeError(e)} → 기기 규칙으로 분류`);
     }
   }
-  store.update(m.id, { ...classifyLocally(m.text), classifiedBy: "local" });
-  replaceTodos(m, extractTodosLocally(m.text));
+  const local = classifyLocally(m.text);
+  store.update(m.id, { ...local, category: m.series?.name ?? local.category, classifiedBy: "local" });
+  if (!m.series) replaceTodos(m, extractTodosLocally(m.text));
 }
 
 export async function enrichLink(m: Memo) {

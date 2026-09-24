@@ -10,6 +10,10 @@
   --chip: #e2e6ec;
   --pen: #1d3a8f;
   --danger: #c0392b;
+  --napkin: #ede3cf;
+  --napkin-edge: #d9ccb2;
+  --napkin-ink: #2b3a78;
+  --napkin-blend: multiply;
   color-scheme: light;
 }
 @media (prefers-color-scheme: dark) {
@@ -24,6 +28,10 @@
     --chip: #272c35;
     --pen: #a9bdf5;
     --danger: #f08070;
+    --napkin: #3a342b;
+    --napkin-edge: #4a4236;
+    --napkin-ink: #d9e0f7;
+    --napkin-blend: soft-light;
     color-scheme: dark;
   }
 }
@@ -38,6 +46,10 @@
   --chip: #272c35;
   --pen: #a9bdf5;
   --danger: #f08070;
+  --napkin: #3a342b;
+  --napkin-edge: #4a4236;
+  --napkin-ink: #d9e0f7;
+  --napkin-blend: soft-light;
   color-scheme: dark;
 }
 
@@ -89,19 +101,6 @@ input:focus, textarea:focus { border-color: var(--accent); }
 h2 { font-size: 15px; margin: 24px 0 6px; }
 code { background: var(--chip); padding: 1px 5px; border-radius: 5px; font-size: 12px; }
 
-/* 냅킨: 살짝 결이 있는 종이 */
-#napkin {
-  min-height: 132px;
-  resize: vertical;
-  font-family: "Nanum Pen Script", "Nanum Pen", cursive, sans-serif;
-  font-size: 24px;
-  color: var(--pen);
-  background:
-    repeating-linear-gradient(0deg, transparent 0 31px, var(--line) 31px 32px),
-    var(--card);
-  line-height: 32px;
-  padding-top: 2px;
-}
 
 #ask { display: flex; gap: 8px; }
 .chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0; }
@@ -151,10 +150,6 @@ code { background: var(--chip); padding: 1px 5px; border-radius: 5px; font-size:
 #toast.show { opacity: 1; transform: translate(-50%, 0); }
 
 /* 위젯 모드: 작은 창에서 적기만 */
-body.widget #app { padding: 10px; }
-body.widget .top h1, body.widget .hint { display: none; }
-body.widget #napkin { min-height: 84px; }
-body.widget #capture .row { justify-content: flex-end; }
 
 .demo-note { display: none; font-size: 12px; color: var(--muted); background: var(--chip); border-radius: 10px; padding: 8px 12px; margin: -4px 0 12px; }
 body.demo .demo-note { display: block; }
@@ -190,8 +185,6 @@ kbd { font: 11px ui-monospace, monospace; border: 1px solid var(--line); border-
 /* 적기: 연재 이어쓰기 · 리마인드 */
 .chip.ghost { background: transparent; border: 1px dashed var(--line); color: var(--muted); }
 .chip.ghost.on { border-color: var(--accent); color: var(--accent); background: transparent; }
-#suggest:empty { display: none; }
-#suggest { margin: 8px 0 0; }
 .remind { margin-top: 8px; padding: 8px 10px; border-radius: 12px; background: var(--chip); }
 .remind .label { font-size: 13px; }
 .remind .chips { margin: 6px 0 0; }
@@ -212,7 +205,6 @@ kbd { font: 11px ui-monospace, monospace; border: 1px solid var(--line); border-
 .step { padding: 12px 14px; border-radius: 12px; background: color-mix(in srgb, var(--accent) 10%, var(--card)); border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--line)); margin-bottom: 12px; }
 .step strong { display: block; font-size: 16px; }
 .step p { margin: 6px 0 0; }
-#todoForm { margin-bottom: 4px; }
 .todos { list-style: none; padding: 0; margin: 0; display: grid; gap: 6px; }
 .todo { display: flex; align-items: center; gap: 10px; background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 8px 10px; }
 .todo .ttl { flex: 1; min-width: 0; overflow-wrap: anywhere; }
@@ -260,3 +252,83 @@ details summary { cursor: pointer; color: var(--muted); font-size: 13px; margin:
 .native-only { display: none; }
 body.native .native-only { display: block; }
 body.native .web-only { display: none; }
+
+/* ================= 레이아웃: 위 탭 · 아래 냅킨 ================= */
+#app { padding-bottom: calc(var(--dock-h, 140px) + 24px); }
+.top { margin-bottom: 6px; flex-wrap: nowrap; }
+.gear { background: transparent; font-size: 20px; padding: 4px 8px; color: var(--muted); }
+.gear.on { background: var(--chip); color: var(--ink); }
+.tabs { margin: 0 -16px 12px; padding: 0 16px; position: sticky; top: 0; z-index: 5; background: var(--paper); padding-block: 6px; }
+.tabs button { padding: 7px 12px; font-size: 15px; }
+.settings-title { font-size: 20px; margin: 4px 0 8px; }
+
+/* 냅킨: 누런 휴지 색 + 구겨진 주름 + 섬유결 */
+.dock {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 20;
+  padding: 0 12px calc(10px + env(safe-area-inset-bottom, 0px));
+  pointer-events: none;
+  transition: transform 0.15s ease-out;
+}
+.dock.kb { padding-bottom: 8px; }
+.dock > * { pointer-events: auto; max-width: 640px; margin-inline: auto; }
+.napkin {
+  position: relative;
+  border-radius: 6px 6px 14px 14px;
+  padding: 12px 14px 10px;
+  background-color: var(--napkin);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='f'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9 0.35' numOctaves='2' seed='3'/%3E%3CfeColorMatrix values='0 0 0 0 0.45  0 0 0 0 0.38  0 0 0 0 0.28  0 0 0 0.18 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url%28%23f%29'/%3E%3C/svg%3E"), url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='420' height='420'%3E%3Cfilter id='c'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.008 0.014' numOctaves='5' seed='11'/%3E%3CfeDiffuseLighting lighting-color='%23fff' surfaceScale='3'%3E%3CfeDistantLight azimuth='225' elevation='52'/%3E%3C/feDiffuseLighting%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url%28%23c%29'/%3E%3C/svg%3E");
+  background-size: 160px 160px, 420px 420px;
+  background-blend-mode: normal, var(--napkin-blend);
+  box-shadow: 0 1px 0 var(--napkin-edge) inset, 0 -2px 0 rgba(255,255,255,0.35) inset, 0 8px 24px rgba(40, 30, 10, 0.18), 0 1px 3px rgba(40, 30, 10, 0.2);
+}
+#napkin {
+  display: block; width: 100%; resize: none; border: 0; outline: none; padding: 2px 0;
+  background: transparent;
+  color: var(--napkin-ink);
+  font-family: var(--napkin-font, inherit);
+  font-size: var(--napkin-size, 17px);
+  line-height: 1.5;
+  min-height: 3em;
+  max-height: 40vh;
+}
+#napkin::placeholder { color: color-mix(in srgb, var(--napkin-ink) 45%, transparent); }
+#napkin:focus { border: 0; }
+.dock-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 6px; }
+.ghost-btn { background: transparent; border: 1px dashed color-mix(in srgb, var(--napkin-ink) 40%, transparent); color: var(--napkin-ink); padding: 6px 12px; font-size: 14px; }
+.ghost-btn.on { border-style: solid; background: color-mix(in srgb, var(--napkin-ink) 10%, transparent); }
+#saveBtn { padding: 8px 22px; }
+.series-tag { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; font-size: 13px; font-weight: 600; color: var(--napkin-ink); }
+.series-tag button { background: transparent; padding: 0 4px; color: inherit; }
+.dock-panel {
+  margin-bottom: 8px; padding: 10px 12px; border-radius: 12px;
+  background: var(--card); border: 1px solid var(--line); box-shadow: 0 6px 18px rgba(0,0,0,0.12);
+}
+.dock-panel .label { font-size: 13px; font-weight: 600; }
+.dock-panel .row { margin: 0 0 6px; }
+.dock-panel .chips { margin: 6px 0; }
+.new-series { display: flex; gap: 6px; margin-top: 6px; }
+.new-series input { flex: 1; min-width: 0; padding: 8px 10px; }
+.new-series select { font: inherit; border-radius: 10px; border: 1px solid var(--line); background: var(--card); color: var(--ink); padding: 0 6px; }
+#remindRow.dock-panel { background: var(--card); }
+
+/* ================= 설정 ================= */
+.setting { padding: 14px 0; border-top: 1px solid var(--line); }
+.setting h3 { font-size: 16px; color: var(--ink); margin: 0 0 4px; display: flex; align-items: center; gap: 8px; }
+.setting > p, .setting #pinArea p { margin: 0 0 10px; color: var(--muted); font-size: 14px; }
+.setting .row { margin-top: 0; }
+.row.start { justify-content: flex-start; }
+.pill { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px; background: var(--chip); color: var(--muted); }
+.pill.on { background: color-mix(in srgb, var(--accent) 18%, var(--card)); color: var(--accent); }
+.link-btn { background: transparent; padding: 8px 0 0; color: var(--accent); font-size: 14px; }
+.font-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+.font-opt {
+  display: grid; gap: 4px; text-align: left; padding: 10px 12px; border-radius: 12px;
+  background: var(--napkin); border: 2px solid transparent; color: var(--napkin-ink);
+}
+.font-opt.on { border-color: var(--accent); }
+.font-sample { line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.font-name { font-size: 12px; color: var(--ink); font-weight: 600; }
+.font-name small { display: block; font-weight: 400; color: var(--muted); }
+
+/* 위젯 창(?widget): 냅킨과 최근 3개만 */
+body.widget .tabs, body.widget .top, body.widget .demo-note { display: none; }
