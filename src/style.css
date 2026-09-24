@@ -1,24 +1,41 @@
 :root {
-  --paper: #f6f1e7;
-  --card: #fffdf8;
-  --ink: #2a2723;
-  --muted: #8a8278;
-  --line: #e4dccd;
-  --accent: #c8553d;
-  --accent-ink: #fff;
-  --chip: #efe7d8;
-  color-scheme: light dark;
+  /* 냅킨(흰 종이) + 볼펜(파란 잉크) */
+  --paper: #eef0f2;
+  --card: #ffffff;
+  --ink: #1f2430;
+  --muted: #6d7482;
+  --line: #d9dde3;
+  --accent: #2446a8;
+  --accent-ink: #ffffff;
+  --chip: #e2e6ec;
+  --pen: #1d3a8f;
+  color-scheme: light;
 }
 @media (prefers-color-scheme: dark) {
-  :root {
-    --paper: #1d1b18;
-    --card: #282521;
-    --ink: #ece6dc;
-    --muted: #9a9185;
-    --line: #3a352f;
-    --accent: #e0765d;
-    --chip: #34302a;
+  :root:not([data-theme="light"]) {
+    --paper: #14171c;
+    --card: #1d2128;
+    --ink: #e6e9ee;
+    --muted: #9098a6;
+    --line: #2e343d;
+    --accent: #7d9bf0;
+    --accent-ink: #0f1420;
+    --chip: #272c35;
+    --pen: #a9bdf5;
+    color-scheme: dark;
   }
+}
+:root[data-theme="dark"] {
+  --paper: #14171c;
+  --card: #1d2128;
+  --ink: #e6e9ee;
+  --muted: #9098a6;
+  --line: #2e343d;
+  --accent: #7d9bf0;
+  --accent-ink: #0f1420;
+  --chip: #272c35;
+  --pen: #a9bdf5;
+  color-scheme: dark;
 }
 
 * { box-sizing: border-box; }
@@ -70,14 +87,16 @@ code { background: var(--chip); padding: 1px 5px; border-radius: 5px; font-size:
 
 /* 냅킨: 살짝 결이 있는 종이 */
 #napkin {
-  min-height: 120px;
+  min-height: 132px;
   resize: vertical;
-  font-size: 17px;
+  font-family: "Nanum Pen Script", "Nanum Pen", cursive, sans-serif;
+  font-size: 24px;
+  color: var(--pen);
   background:
-    repeating-linear-gradient(0deg, transparent 0 27px, color-mix(in srgb, var(--line) 60%, transparent) 27px 28px),
+    repeating-linear-gradient(0deg, transparent 0 31px, var(--line) 31px 32px),
     var(--card);
-  line-height: 28px;
-  padding-top: 6px;
+  line-height: 32px;
+  padding-top: 2px;
 }
 
 #ask { display: flex; gap: 8px; }
@@ -132,3 +151,10 @@ body.widget #app { padding: 10px; }
 body.widget .top h1, body.widget .hint { display: none; }
 body.widget #napkin { min-height: 84px; }
 body.widget #capture .row { justify-content: flex-end; }
+
+.demo-note { display: none; font-size: 12px; color: var(--muted); background: var(--chip); border-radius: 10px; padding: 8px 12px; margin: -4px 0 12px; }
+body.demo .demo-note { display: block; }
+.del.armed { color: #fff; background: #c0392b; border-radius: 8px; padding: 2px 8px; font-size: 12px; }
+.cat-edit { width: 9em; padding: 2px 8px; font-size: 12px; border-radius: 999px; }
+button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) { #toast { transition: none; } }

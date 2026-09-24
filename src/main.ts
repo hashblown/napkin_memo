@@ -47,14 +47,30 @@ function memoItem(m: Memo, reason?: string) {
   </li>`;
 }
 
+// 삭제는 두 번 눌러 확정, 분류 이름은 그 자리에서 고친다 (브라우저 팝업 없이)
 document.addEventListener("click", (e) => {
   const t = e.target as HTMLElement;
   const del = t.dataset.del;
-  if (del && confirm("이 메모를 지울까요?")) store.remove(del);
+  if (del) {
+    if (t.classList.contains("armed")) return store.remove(del);
+    t.classList.add("armed");
+    t.textContent = "지우기";
+    setTimeout(() => {
+      t.classList.remove("armed");
+      t.textContent = "×";
+    }, 3000);
+  }
   const recat = t.dataset.recat;
   if (recat) {
-    const next = prompt("분류 이름", store.get(recat)?.category)?.trim();
-    if (next) store.update(recat, { category: next, classifiedBy: "ai" });
+    const input = Object.assign(document.createElement("input"), { className: "cat-edit", value: store.get(recat)?.category ?? "" });
+    t.replaceWith(input);
+    input.focus();
+    input.select();
+    input.addEventListener("keydown", (ev) => {
+      if (ev.key === "Enter" && !ev.isComposing && input.value.trim()) store.update(recat, { category: input.value.trim(), classifiedBy: "ai" });
+      if (ev.key === "Escape") render();
+    });
+    input.addEventListener("blur", () => render());
   }
 });
 
@@ -214,6 +230,7 @@ function render() {
   renderDrawer();
 }
 store.subscribe(render);
+if (import.meta.env.VITE_DEMO) seedDemo();
 render();
 
 // ---------- 시작 옵션: ?widget, ?q=… ----------
@@ -231,6 +248,25 @@ if (quick) {
 }
 render();
 
-if ("serviceWorker" in navigator && import.meta.env.PROD) {
-  navigator.serviceWorker.register("./sw.js");
+if ("serviceWorker" in navigator && import.meta.env.PROD && !import.meta.env.VITE_DEMO) {
+  navigator.serviceWorker.register("./sw.js").catch(() => {});
+}
+
+// 미리보기 전용: 처음 열면 예시 메모를 채워 둔다
+function seedDemo() {
+  document.body.classList.add("demo");
+  if (store.all().length) return;
+  const H = 3600_000;
+  const examples: [string, string, string[], string[], number][] = [
+    ["카페 옆자리 사람들이 노트북 대신 종이에 적고 있었다. 손으로 쓰면 생각이 느려져서 좋은 걸까?", "관찰", ["손글씨", "속도"], ["사람을 이해하고 싶을 때", "글이 막힐 때"], 2],
+    ["동네 가게 리뷰를 한 장짜리 지도로 모아보는 서비스", "사업·기획", ["동네", "리뷰"], ["기획 회의 전", "새 프로젝트를 시작할 때"], 20],
+    ["제목 후보: 냅킨의 철학", "글감", ["제목"], ["글이 막힐 때", "콘텐츠 주제가 필요할 때"], 30],
+    ["비 오는 날엔 창가 자리부터 찬다. 사람들은 비를 보는 걸 좋아한다", "관찰", ["날씨", "공간"], ["공간을 기획할 때", "새로운 관점이 필요할 때"], 50],
+    ["완벽하게 쓰려다 아무것도 못 쓴 날. 일단 적고 나중에 고치자", "마음·성찰", ["습관"], ["마음이 지칠 때", "글이 막힐 때"], 70],
+    ["발표는 질문 하나로 시작하면 사람들이 고개를 든다", "배움", ["발표"], ["발표를 준비할 때", "기획 회의 전"], 120],
+  ];
+  for (const [text, category, tags, useWhen, hoursAgo] of examples.reverse()) {
+    const m = store.add(text);
+    store.update(m.id, { category, tags, useWhen, classifiedBy: "local", createdAt: Date.now() - hoursAgo * H });
+  }
 }
