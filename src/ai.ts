@@ -72,6 +72,65 @@ export async function classify(apiKey: string, text: string, existing: string[])
   return res.parsed_output;
 }
 
+const BatchResult = z.object({
+  results: z.array(
+    z.object({
+      id: z.string(),
+      category: z.string().describe("짧은 한국어 분류명 (2~6글자). 기존 분류 · 사용자가 고친 예시를 우선 따른다"),
+      tags: z.array(z.string()).describe("핵심 키워드 1~4개"),
+      useWhen: z.array(z.string()).describe("이 메모가 영감이 될 만한 구체적 상황 2~3개"),
+      todos: z
+        .array(z.object({ title: z.string(), due: z.string().describe("'YYYY-MM-DD' 또는 'YYYY-MM-DDTHH:mm'. 없으면 빈 문자열") }))
+        .describe("실제로 해야 할 일. 감상·배운 점·조언은 넣지 않는다. 없으면 빈 배열"),
+    }),
+  ),
+});
+
+export type Example = { text: string; category?: string; todo?: boolean };
+
+/** 여러 메모를 한 번에 정리한다. 사용자가 고친 분류를 예시로 넘겨 그 기준을 따르게 한다 */
+export async function classifyBatch(
+  apiKey: string,
+  memos: { id: string; text: string; createdAt: number }[],
+  existing: string[],
+  examples: Example[],
+) {
+  const exampleLines = examples
+    .slice(0, 40)
+    .map((e) => `- "${e.text.replace(/\s+/g, " ").slice(0, 120)}" → ${[e.category ? `분류: ${e.category}` : "", e.todo === false ? "할 일 아님" : e.todo ? "할 일임" : ""].filter(Boolean).join(", ")}`)
+    .join("\n");
+  const res = await client(apiKey).beta.messages.parse({
+    model: MODEL,
+    max_tokens: 16000,
+    output_config: { effort: "low", format: betaZodOutputFormat(BatchResult) },
+    ...FALLBACK,
+    system:
+      "사용자가 급히 적은 메모들을 정리하는 조수다. 메모마다 분류 하나, 키워드, 다시 꺼내 보면 좋을 상황, 해야 할 일을 뽑는다. " +
+      "사용자가 직접 고친 예시가 있으면 그 기준을 가장 우선한다. 분류는 너무 잘게 쪼개지 말고 기존 분류를 재사용한다. " +
+      "모든 메모에 대해 id를 그대로 돌려준다. 한국어로 답한다.",
+    messages: [
+      {
+        role: "user",
+        content: [
+          {
+            type: "text",
+            text: `기존 분류: ${existing.join(", ") || "(없음)"}\n\n사용자가 고친 예시:\n${exampleLines || "(없음)"}`,
+            cache_control: { type: "ephemeral" },
+          },
+          {
+            type: "text",
+            text: `${nowLine()}\n\n정리할 메모 (JSON lines, at은 적은 날짜):\n${memos
+              .map((m) => JSON.stringify({ id: m.id, at: new Date(m.createdAt).toISOString().slice(0, 10), text: m.text }))
+              .join("\n")}`,
+          },
+        ],
+      },
+    ],
+  });
+  if (res.stop_reason === "refusal" || !res.parsed_output) throw new Error("정리하지 못했어요.");
+  return res.parsed_output.results;
+}
+
 const LinkMeta = z.object({
   title: z.string().describe("페이지 제목 (짧게)"),
   summary: z.string().describe("무슨 페이지인지 한 문장 요약"),

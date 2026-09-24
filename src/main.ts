@@ -4,7 +4,7 @@ import { vault } from "./vault";
 import { inspireLocally } from "./local";
 import { findUrl } from "./detect";
 import { inspire, describeError } from "./ai";
-import { save, classifyNote, enrichLink } from "./pipeline";
+import { save, classifyNote, runBatch, maybeBatch, pendingForAI, onBatchChange, isBatchRunning, DEFAULT_BATCH } from "./pipeline";
 import { dueItems, notifyDue, REMIND_PRESETS, presetAt } from "./reminders";
 import { $, esc, toast, memoItem, dueLabel, onRerender } from "./ui";
 import { renderTodos } from "./views/todos";
@@ -252,7 +252,8 @@ $<HTMLFormElement>("#keyform").addEventListener("submit", (e) => {
   e.preventDefault();
   settings.set({ apiKey: $<HTMLInputElement>("#apikey").value.trim() });
   renderAi();
-  toast(settings.get().apiKey ? "키를 저장했어요. 이제 Claude가 정리해요" : "키를 지웠어요. 기본 정리로 돌아가요");
+  toast(settings.get().apiKey ? "키를 저장했어요. 이제 Claude가 정리해요" : "키를 지웠어요. 기기 규칙으로만 나눠요");
+  void maybeBatch();
 });
 
 function renderAi() {
@@ -260,8 +261,40 @@ function renderAi() {
   const pill = $("#aiStatus");
   pill.textContent = on ? "켜짐" : "꺼짐";
   pill.classList.toggle("on", on);
-  $("#reclassify").hidden = !on;
+  $("#aiControls").hidden = !on;
+  const every = settings.get().batchEvery ?? DEFAULT_BATCH;
+  $("#batchChips").innerHTML = BATCH_OPTIONS.map(
+    (o) => `<button type="button" role="radio" aria-checked="${o.n === every}" class="chip ${o.n === every ? "on" : ""}" data-batch="${o.n}">${o.label}</button>`,
+  ).join("");
+  const pending = pendingForAI().length;
+  const total = store.forAI().filter((m) => m.classifiedBy !== "user").length;
+  $("#pendingInfo").textContent = isBatchRunning()
+    ? "AI가 정리하는 중이에요…"
+    : `AI 정리를 기다리는 새 메모 ${pending}개 · AI가 다시 정리할 수 있는 메모 ${total}개` +
+      (every && pending < every ? ` (새 메모 ${every - pending}개 더 적으면 자동으로 정리해요)` : "");
+  ($("#runNew") as HTMLButtonElement).disabled = isBatchRunning() || !pending;
+  ($("#runAll") as HTMLButtonElement).disabled = isBatchRunning() || !total;
 }
+
+const BATCH_OPTIONS = [
+  { n: 1, label: "적을 때마다" },
+  { n: 5, label: "5개마다" },
+  { n: 10, label: "10개마다" },
+  { n: 20, label: "20개마다" },
+  { n: 0, label: "직접 할 때만" },
+];
+$("#batchChips").addEventListener("click", (e) => {
+  const n = (e.target as HTMLElement).closest<HTMLElement>("[data-batch]")?.dataset.batch;
+  if (n === undefined) return;
+  settings.set({ batchEvery: Number(n) });
+  renderAi();
+  const every = Number(n);
+  toast(every === 0 ? "‘지금 정리하기’를 누를 때만 정리할게요" : every === 1 ? "적을 때마다 바로 정리할게요" : `새 메모가 ${every}개 쌓일 때마다 정리할게요`);
+  void maybeBatch();
+});
+$("#runNew").addEventListener("click", () => void runBatch("new"));
+$("#runAll").addEventListener("click", () => void runBatch("all"));
+onBatchChange(() => $("#settings").classList.contains("on") && renderAi());
 
 const FONT_SAMPLE = "냅킨에 적은 생각 가나다 Aa 123";
 function renderFonts() {
@@ -282,14 +315,6 @@ $("#fontList").addEventListener("click", (e) => {
   renderFonts();
   toast(`글씨체를 '${fontById(id).label}'(으)로 바꿨어요`);
 });
-$("#reclassify").addEventListener("click", async () => {
-  if (!settings.get().apiKey) return toast("먼저 API 키를 넣어주세요");
-  const targets = store.forAI().filter((m) => m.classifiedBy === "local");
-  toast(`${targets.length}개 다시 분류 중…`);
-  for (const m of targets) await (m.kind === "link" ? enrichLink(m) : classifyNote(m));
-  toast("다시 분류했어요");
-});
-
 function renderPin() {
   const area = $("#pinArea");
   if (vault.hasPin()) {
@@ -352,6 +377,7 @@ function render() {
   renderTodos();
   renderLinks();
   renderDrawer();
+  if ($("#settings").classList.contains("on")) renderAi();
 }
 onRerender(render);
 store.subscribe(render);

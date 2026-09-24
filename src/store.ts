@@ -29,6 +29,17 @@ export interface Memo {
   /** 잠근 분류에 속한 메모. AI에 보내지 않고, PIN이 있으면 text 대신 cipher로 저장 */
   locked?: boolean;
   cipher?: string;
+  /** 사용자가 '할 일 아님'으로 고친 메모 → AI가 할 일을 다시 만들지 않는다 */
+  noTodo?: boolean;
+}
+
+/** 사용자가 고친 분류. 로컬 규칙과 AI에 예시로 쓰인다 */
+export interface Correction {
+  text: string;
+  kind: Memo["kind"];
+  category?: string;
+  todo?: boolean;
+  at: number;
 }
 
 export interface Todo {
@@ -49,6 +60,8 @@ export interface Todo {
 
 export interface Settings {
   apiKey: string;
+  /** AI 정리 주기: 새 메모가 N개 쌓일 때마다. 0이면 직접 할 때만 */
+  batchEvery?: number;
   /** 냅킨 입력칸 글씨체 (fonts.ts의 id) */
   font?: string;
 }
@@ -59,6 +72,7 @@ const SETTINGS_KEY = "napkin.settings.v1";
 const CATS_KEY = "napkin.categories.v1";
 const LOCKED_CATS_KEY = "napkin.lockedCategories.v1";
 const SERIES_KEY = "napkin.series.v1";
+const CORRECTIONS_KEY = "napkin.corrections.v1";
 
 export const VAULT = "보관함";
 
@@ -86,6 +100,7 @@ let userCats: string[] = read<string[]>(CATS_KEY, []);
 let lockedCats: string[] = read<string[]>(LOCKED_CATS_KEY, [VAULT]);
 /** 사용자가 만든 연재 (아직 기록이 없어도 유지) */
 let seriesDefs: { name: string; unit: string }[] = read(SERIES_KEY, []);
+let corrections: Correction[] = read(CORRECTIONS_KEY, []);
 const listeners = new Set<() => void>();
 
 function commit() {
@@ -94,6 +109,7 @@ function commit() {
   write(CATS_KEY, userCats);
   write(LOCKED_CATS_KEY, lockedCats);
   write(SERIES_KEY, seriesDefs);
+  write(CORRECTIONS_KEY, corrections);
   listeners.forEach((fn) => fn());
 }
 
@@ -159,6 +175,14 @@ export const store = {
     userCats = [...new Set([...userCats, ...newCats])];
     const to = new Map(moves.filter((m) => !lockedCats.includes(m.to)).map((m) => [m.id, m.to]));
     memos = memos.map((m) => (to.has(m.id) && !m.locked ? { ...m, category: to.get(m.id)!, classifiedBy: "ai" } : m));
+    commit();
+  },
+
+  // ---------- 사용자가 고친 분류 ----------
+  corrections: () => corrections,
+  addCorrection(c: Omit<Correction, "at">) {
+    // 잠긴 메모 내용은 예시로도 남기지 않는다 (호출하는 쪽에서 걸러서 온다)
+    corrections = [{ ...c, text: c.text.slice(0, 300), at: Date.now() }, ...corrections].slice(0, 100);
     commit();
   },
 

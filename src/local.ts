@@ -12,7 +12,25 @@ const RULES: { category: string; words: string[]; useWhen: string[] }[] = [
   { category: "마음·성찰", words: ["느낌", "기분", "나는", "행복", "불안", "감사", "후회", "다짐", "마음"], useWhen: ["마음이 지칠 때", "방향을 잃었을 때"] },
 ];
 
-export function classifyLocally(text: string): Pick<Memo, "category" | "tags" | "useWhen"> {
+/** 사용자가 고친 메모 중 가장 비슷한 것의 분류 (비슷한 게 없으면 null) */
+export function learnedCategory(text: string, labeled: { text: string; category: string }[]): string | null {
+  const q = grams(text);
+  if (!q.size) return null;
+  let best: { category: string; score: number } | null = null;
+  for (const l of labeled) {
+    const g = grams(l.text);
+    let hit = 0;
+    q.forEach((x) => g.has(x) && hit++);
+    const score = hit / Math.sqrt(q.size * g.size || 1);
+    if (!best || score > best.score) best = { category: l.category, score };
+  }
+  return best && best.score >= 0.3 ? best.category : null;
+}
+
+export function classifyLocally(text: string, labeled: { text: string; category: string }[] = []): Pick<Memo, "category" | "tags" | "useWhen"> {
+  const learned = learnedCategory(text, labeled);
+  const tags0 = [...new Set((text.match(/#[\p{L}\p{N}_]+/gu) ?? []).map((t) => t.slice(1)))];
+  if (learned) return { category: learned, tags: tags0, useWhen: [] };
   const lower = text.toLowerCase();
   let best = { category: "떠오른 생각", score: 0, useWhen: ["그냥 새로운 자극이 필요할 때"] };
   for (const r of RULES) {
