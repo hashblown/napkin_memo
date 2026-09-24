@@ -1,6 +1,32 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <rect width="512" height="512" rx="112" fill="#2446a8"/>
-  <path d="M128 136h256v200l-64 64H128z" fill="#fffdf8"/>
-  <path d="M320 400v-64h64" fill="#d9dde3"/>
-  <path d="M168 200h176M168 248h136M168 296h100" stroke="#2446a8" stroke-width="18" stroke-linecap="round"/>
+  <defs>
+    <filter id="lift" x="-25%" y="-25%" width="150%" height="150%">
+      <feDropShadow dx="0" dy="12" stdDeviation="14" flood-color="#6b4a2b" flood-opacity="0.22"/>
+    </filter>
+    <filter id="flapShadow" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="-5" dy="-5" stdDeviation="6" flood-color="#6b4a2b" flood-opacity="0.28"/>
+    </filter>
+    <linearGradient id="body" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#fcf7ee"/>
+      <stop offset="1" stop-color="#eee1c8"/>
+    </linearGradient>
+    <linearGradient id="flap" x1="1" y1="1" x2="0.2" y2="0.2">
+      <stop offset="0" stop-color="#fffdf9"/>
+      <stop offset="1" stop-color="#f1e5cf"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" fill="#ffffff"/>
+  <g transform="translate(256 262) scale(1.16) rotate(-8) translate(-256 -256)">
+    <!-- 모서리 하나를 접은 냅킨 -->
+    <path d="M120 120 H392 V280 L280 392 H120 Z" fill="url(#body)" filter="url(#lift)"/>
+    <!-- 네 번 접었던 자국 -->
+    <path d="M256 124 V388 M124 256 H388" stroke="#e2d2b4" stroke-width="2.5" opacity="0.8"/>
+    <!-- 가장자리 엠보싱 -->
+    <path d="M142 142 H370 V270 M270 370 H142 V142" fill="none" stroke="#d8c5a3" stroke-width="6" stroke-linecap="round" stroke-dasharray="0 15"/>
+    <!-- 볼펜 낙서 -->
+    <path d="M168 206 q17 -15 34 0 t34 0 t34 0" fill="none" stroke="#2446a8" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M168 252 q15 -12 30 0 t30 0" fill="none" stroke="#2446a8" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+    <!-- 접힌 모서리 -->
+    <path d="M392 280 L280 392 L280 280 Z" fill="url(#flap)" filter="url(#flapShadow)"/>
+  </g>
 </svg>

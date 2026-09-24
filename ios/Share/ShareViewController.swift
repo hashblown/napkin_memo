@@ -2,14 +2,14 @@ import UIKit
 import UniformTypeIdentifiers
 import WidgetKit
 
-/// 공유 메뉴의 '냅킨': 링크 · 글을 받아 받은편지함에 넣고 바로 닫힌다
+/// 공유 메뉴의 'napkin': 링크 · 글을 받아 받은편지함에 넣고 바로 닫힌다
 final class ShareViewController: UIViewController {
     private let label = UILabel()
 
     override func viewDidLoad() {
         super.viewDidLoad()
         view.backgroundColor = .clear
-        label.text = "냅킨에 담는 중…"
+        label.text = "napkin에 담는 중…"
         label.font = .systemFont(ofSize: 17, weight: .semibold)
         label.textAlignment = .center
         label.backgroundColor = .secondarySystemBackground
@@ -46,7 +46,7 @@ final class ShareViewController: UIViewController {
         let text = parts.filter { seen.insert($0).inserted }.joined(separator: "\n")
         SharedStore.addMemo(text)
         WidgetCenter.shared.reloadAllTimelines()
-        await MainActor.run { label.text = text.isEmpty ? "담을 내용이 없어요" : "냅킨에 담았어요 ✓" }
+        await MainActor.run { label.text = text.isEmpty ? "담을 내용이 없어요" : "napkin에 담았어요 ✓" }
         try? await Task.sleep(nanoseconds: 700_000_000)
         await MainActor.run { extensionContext?.completeRequest(returningItems: nil) }
     }

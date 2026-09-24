@@ -3,7 +3,7 @@ import WidgetKit
 
 /// 앱을 열지 않고 적기: 단축어 · 액션 버튼 · Siri · Spotlight 에서 시스템 입력창이 뜬다
 struct AddMemoIntent: AppIntent {
-    static let title: LocalizedStringResource = "냅킨에 적기"
+    static let title: LocalizedStringResource = "napkin에 적기"
     static let description: IntentDescription? = IntentDescription("떠오른 생각을 앱을 열지 않고 바로 적어요.")
 
     @Parameter(title: "메모", requestValueDialog: IntentDialog("뭐가 떠올랐어요?"))
@@ -15,7 +15,7 @@ struct AddMemoIntent: AppIntent {
     func perform() async throws -> some IntentResult & ProvidesDialog {
         SharedStore.addMemo(text)
         WidgetCenter.shared.reloadAllTimelines()
-        return .result(dialog: "냅킨에 적었어요")
+        return .result(dialog: "napkin에 적었어요")
     }
 }
 

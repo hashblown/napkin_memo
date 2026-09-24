@@ -23,7 +23,7 @@ struct ContentView: View {
     var body: some View {
         WebView(model: model)
             .ignoresSafeArea()
-            .background(Theme.paper)
+            .background(Theme.table)
             .sheet(isPresented: $model.showCapture) {
                 CaptureSheet()
                     .environmentObject(model)
@@ -42,7 +42,7 @@ struct CaptureSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Text("냅킨").font(.headline)
+                Text("napkin").font(.headline)
                 Spacer()
                 Button("닫기") { dismiss() }
             }

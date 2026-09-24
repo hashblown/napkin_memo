@@ -403,7 +403,7 @@ store
 const shared = [params.get("title"), params.get("text"), params.get("url")].filter((x): x is string => !!x?.trim());
 const quick = params.get("q") ?? (shared.length ? [...new Set(shared)].join("\n") : null);
 if (quick) {
-  void save(quick).then((m) => toast(m?.kind === "link" ? "북마크에 담았어요" : "냅킨에 적었어요"));
+  void save(quick).then((m) => toast(m?.kind === "link" ? "북마크에 담았어요" : "적었어요"));
   ["q", "title", "text", "url"].forEach((k) => params.delete(k));
   history.replaceState(null, "", `${location.pathname}${params.size ? `?${params}` : ""}`);
 }

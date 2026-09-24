@@ -1,12 +1,12 @@
 {
-  "name": "냅킨 메모",
-  "short_name": "냅킨",
-  "description": "떠오른 생각을 냅킨처럼 적고, 알아서 분류하고, 필요할 때 꺼내주는 메모",
+  "name": "napkin",
+  "short_name": "napkin",
+  "description": "떠오른 생각을 카페 냅킨에 적듯 적고, 알아서 분류하고, 필요할 때 꺼내주는 메모",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
-  "background_color": "#eef0f2",
-  "theme_color": "#eef0f2",
+  "background_color": "#8a5d3b",
+  "theme_color": "#8a5d3b",
   "icons": [
     { "src": "icon-192.png", "sizes": "192x192", "type": "image/png" },
     { "src": "icon-512.png", "sizes": "512x512", "type": "image/png" },

@@ -25,7 +25,7 @@ targets:
     info:
       path: App/Info.plist
       properties:
-        CFBundleDisplayName: 냅킨
+        CFBundleDisplayName: napkin
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         # 앱 안에 띄울 웹앱 주소
@@ -59,7 +59,7 @@ targets:
     info:
       path: Widgets/Info.plist
       properties:
-        CFBundleDisplayName: 냅킨 위젯
+        CFBundleDisplayName: napkin 위젯
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         NSExtension:
@@ -82,7 +82,7 @@ targets:
     info:
       path: Share/Info.plist
       properties:
-        CFBundleDisplayName: 냅킨
+        CFBundleDisplayName: napkin
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         NSExtension:

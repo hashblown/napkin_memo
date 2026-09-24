@@ -46,7 +46,7 @@ struct CaptureView: View {
                 Image(systemName: "square.and.pencil").font(.title2)
             }
         case .accessoryRectangular:
-            Label("냅킨에 적기", systemImage: "square.and.pencil").font(.headline)
+            Label("napkin에 적기", systemImage: "square.and.pencil").font(.headline)
         default:
             VStack(alignment: .leading, spacing: 0) {
                 Image(systemName: "square.and.pencil")
@@ -58,7 +58,7 @@ struct CaptureView: View {
                     .foregroundStyle(Theme.ink)
                 // 냅킨 줄
                 Rectangle().fill(Theme.chip).frame(height: 1).padding(.top, 8)
-                Text("냅킨")
+                Text("napkin")
                     .font(.caption2)
                     .foregroundStyle(Theme.muted)
                     .padding(.top, 4)
@@ -138,7 +138,7 @@ struct RemindView: View {
 
     private var lockScreen: some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text(entry.item.map { $0.kind == "link" ? "🔗 다시 볼 것" : "☐ 챙길 것" } ?? "냅킨").font(.caption2)
+            Text(entry.item.map { $0.kind == "link" ? "🔗 다시 볼 것" : "☐ 챙길 것" } ?? "napkin").font(.caption2)
             Text(entry.item?.title ?? "챙길 게 없어요").font(.headline).lineLimit(2)
             if let due = DueText.label(entry.item?.dueDate, now: entry.date) { Text(due).font(.caption2) }
         }

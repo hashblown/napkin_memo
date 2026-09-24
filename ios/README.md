@@ -1,4 +1,4 @@
-# 냅킨 iOS 앱
+# napkin iOS 앱
 
 배포된 웹앱(`https://hashblown.github.io/napkin_memo/`)을 앱 안에 띄우고, 아이폰에서만 되는 것들을 붙인 껍데기 앱이다.
 
