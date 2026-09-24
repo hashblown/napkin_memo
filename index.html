@@ -23,31 +23,58 @@
         <h1>냅킨</h1>
         <nav class="tabs" role="tablist">
           <button data-tab="write" class="on">적기</button>
+          <button data-tab="todo">할 일<span class="badge" id="todoBadge" hidden></span></button>
+          <button data-tab="links">북마크</button>
           <button data-tab="drawer">서랍</button>
           <button data-tab="inspire">영감</button>
           <button data-tab="settings" aria-label="설정">⚙︎</button>
         </nav>
       </header>
-      <p class="demo-note">미리보기예요. 예시 메모 6개가 들어 있어요. 여기서는 기기 안의 규칙으로 분류하고, 설치한 앱에서 API 키를 넣으면 Claude가 분류해요.</p>
+      <p class="demo-note">미리보기예요. 예시 메모가 들어 있고, 분류는 기기 안의 규칙으로 해요. 설치한 앱에서 API 키를 넣으면 Claude가 분류하고 링크 내용을 읽어요.</p>
 
       <section id="write" class="panel on">
+        <div id="dueNow"></div>
         <form id="capture">
-          <textarea id="napkin" placeholder="방금 떠오른 거, 그냥 적어요…" rows="4" autofocus></textarea>
+          <textarea id="napkin" placeholder="방금 떠오른 거, 링크, 할 일… 그냥 적어요" rows="4" autofocus></textarea>
+          <div id="suggest" class="chips"></div>
+          <div id="remindRow" class="remind" hidden>
+            <span class="label">⏰ 다시 알려줄까요?</span>
+            <div class="chips" id="remindChips"></div>
+            <input id="remindAt" type="datetime-local" hidden />
+          </div>
           <div class="row">
-            <span class="hint">Enter 저장 · Shift+Enter 줄바꿈</span>
+            <span class="hint">Enter 저장 · Shift+Enter 줄바꿈 · Tab 연재 이어쓰기</span>
             <button type="submit" class="primary">적기</button>
           </div>
         </form>
         <ul id="recent" class="memos"></ul>
       </section>
 
+      <section id="todo" class="panel">
+        <div id="stepCard"></div>
+        <form id="todoForm" class="row">
+          <input id="todoInput" placeholder="할 일 추가 (예: 금요일 3시 치과 예약)" autocomplete="off" />
+          <button type="submit" class="primary">추가</button>
+        </form>
+        <div id="todoLists"></div>
+      </section>
+
+      <section id="links" class="panel">
+        <input id="linkSearch" type="search" placeholder="북마크 찾기" />
+        <div id="linkCats" class="chips"></div>
+        <ul id="linkList" class="memos"></ul>
+      </section>
+
       <section id="drawer" class="panel">
         <input id="search" type="search" placeholder="찾기" />
+        <div id="seriesBar"></div>
+        <div id="seriesPanel" class="series" hidden></div>
         <div id="cats" class="chips"></div>
         <div class="row tools">
           <div class="row">
             <button id="addcat">+ 새 분류</button>
             <button id="renamecat" hidden>이름 바꾸기</button>
+            <button id="lockcat" hidden></button>
           </div>
           <button id="reorg" class="primary">정리 제안 받기</button>
         </div>
@@ -57,6 +84,7 @@
           <button type="button" id="catcancel">취소</button>
         </form>
         <div id="reorgbox" class="reorg" hidden></div>
+        <div id="vaultGate" hidden></div>
         <ul id="list" class="memos"></ul>
       </section>
 
@@ -73,14 +101,27 @@
       <section id="settings" class="panel">
         <h2>AI 분류 · 영감</h2>
         <p class="muted">
-          Anthropic API 키를 넣으면 Claude가 메모를 분류하고 영감을 골라줘요. 키는 이 기기에만 저장돼요.
-          없으면 기기 안의 간단한 규칙으로 동작해요.
+          Anthropic API 키를 넣으면 Claude가 메모를 분류하고, 할 일을 뽑고, 링크 내용을 읽어 정리해요. 키는 이 기기에만 저장돼요.
+          없으면 기기 안의 간단한 규칙으로 동작해요. 잠근 분류의 메모는 어떤 경우에도 AI로 보내지 않아요.
         </p>
         <form id="keyform" class="row">
           <input id="apikey" type="password" placeholder="sk-ant-…" autocomplete="off" />
           <button type="submit">저장</button>
         </form>
         <button id="reclassify">규칙으로 분류된 메모를 AI로 다시 분류</button>
+
+        <h2>보관함 잠금</h2>
+        <div id="pinArea"></div>
+
+        <h2>알림</h2>
+        <p class="muted">앱이 열려 있거나 켜질 때 알려줘요. 앱이 꺼져 있어도 꼭 울려야 하는 건 할 일·북마크의 <b>📅 캘린더</b> 버튼으로 캘린더에 넣으세요.</p>
+        <button id="notifyOn">알림 허용하기</button>
+
+        <h2>공유 버튼으로 저장하기</h2>
+        <p class="muted">
+          <b>안드로이드·크롬북</b>: 앱을 설치하면 공유 메뉴에 ‘냅킨’이 생겨요.<br />
+          <b>아이폰</b>: 단축어 앱 → 새 단축어 → 설정(ⓘ)에서 <b>공유 시트에서 보기</b> 켜기 → 동작 ① <code>URL 인코딩</code>(단축어 입력) ② <code>텍스트</code>: <code id="shareBase"></code><code>[URL 인코딩된 텍스트]</code> ③ <code>URL 열기</code>. 이제 사파리·인스타 등에서 공유 → ‘냅킨’을 누르면 바로 저장돼요.
+        </p>
 
         <h2>기기 옮기기 · 백업</h2>
         <div class="row">
@@ -90,8 +131,7 @@
 
         <h2>빠르게 적기</h2>
         <p class="muted">
-          이 주소 뒤에 <code>?q=메모내용</code>을 붙여 열면 바로 저장돼요. 아이폰 단축어 위젯이나 데스크탑 단축키에 연결해 쓰세요.
-          작은 위젯 창은 <code>?widget</code>으로 열어요.
+          이 주소 뒤에 <code>?q=메모내용</code>을 붙여 열면 바로 저장돼요. 작은 위젯 창은 <code>?widget</code>으로 열어요.
         </p>
       </section>
     </div>

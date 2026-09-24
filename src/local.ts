@@ -76,3 +76,25 @@ export function suggestReorgLocally(memos: Memo[], categories: string[]) {
   }
   return { newCategories, moves };
 }
+
+const JOSA = /(에서|으로|부터|까지|처럼|보다|하고|해서|하면|해야|하기|했다|한다|은|는|이|가|을|를|에|로|도|만|와|과|의)$/;
+const STOP = new Set(["그리고", "하지만", "그냥", "너무", "조금", "많이", "정말", "진짜", "이번", "다음", "처음", "마지막", "워밍업", "회차", "주차", "오늘", "생각", "느낌", "것", "때"]);
+
+/** 연재 기록들에서 여러 회차에 반복되는 단어를 센다 (회차 수 기준) */
+export function recurringKeywords(texts: string[], top = 12) {
+  const df = new Map<string, number>();
+  for (const t of texts) {
+    const words = new Set(
+      t
+        .split(/[^\p{L}\p{N}]+/u)
+        .map((w) => (w.length > 2 ? w.replace(JOSA, "") : w))
+        .filter((w) => w.length >= 2 && !STOP.has(w) && !/^\d+$/.test(w)),
+    );
+    words.forEach((w) => df.set(w, (df.get(w) ?? 0) + 1));
+  }
+  return [...df.entries()]
+    .filter(([, n]) => n >= 2)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, top)
+    .map(([word, count]) => ({ word, count }));
+}

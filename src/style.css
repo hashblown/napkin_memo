@@ -9,6 +9,7 @@
   --accent-ink: #ffffff;
   --chip: #e2e6ec;
   --pen: #1d3a8f;
+  --danger: #c0392b;
   color-scheme: light;
 }
 @media (prefers-color-scheme: dark) {
@@ -22,6 +23,7 @@
     --accent-ink: #0f1420;
     --chip: #272c35;
     --pen: #a9bdf5;
+    --danger: #f08070;
     color-scheme: dark;
   }
 }
@@ -35,6 +37,7 @@
   --accent-ink: #0f1420;
   --chip: #272c35;
   --pen: #a9bdf5;
+  --danger: #f08070;
   color-scheme: dark;
 }
 
@@ -169,3 +172,86 @@ button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .sug input { width: auto; margin-top: 4px; accent-color: var(--accent); }
 .sug span { display: grid; gap: 2px; min-width: 0; overflow-wrap: anywhere; }
 .sug small { color: var(--muted); font-size: 12px; }
+
+/* ---------- 탭이 6개: 좁으면 가로로 스크롤 ---------- */
+.top { flex-wrap: wrap; row-gap: 6px; }
+.tabs { overflow-x: auto; scrollbar-width: none; max-width: 100%; }
+.tabs::-webkit-scrollbar { display: none; }
+.tabs button { white-space: nowrap; position: relative; }
+.badge {
+  display: inline-block; min-width: 16px; margin-left: 4px; padding: 0 4px;
+  border-radius: 999px; background: var(--danger); color: #fff; font-size: 11px; line-height: 16px; text-align: center;
+}
+.eyebrow { display: block; font-size: 11px; font-weight: 600; letter-spacing: 0.04em; color: var(--muted); margin-bottom: 6px; }
+.grow { flex: 1; }
+h3 { font-size: 13px; color: var(--muted); margin: 18px 0 6px; font-weight: 600; }
+kbd { font: 11px ui-monospace, monospace; border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; margin-left: 4px; }
+
+/* 적기: 연재 이어쓰기 · 리마인드 */
+.chip.ghost { background: transparent; border: 1px dashed var(--line); color: var(--muted); }
+.chip.ghost.on { border-color: var(--accent); color: var(--accent); background: transparent; }
+#suggest:empty { display: none; }
+#suggest { margin: 8px 0 0; }
+.remind { margin-top: 8px; padding: 8px 10px; border-radius: 12px; background: var(--chip); }
+.remind .label { font-size: 13px; }
+.remind .chips { margin: 6px 0 0; }
+.remind .chip { background: var(--card); }
+.remind .chip.on { background: var(--accent); color: var(--accent-ink); }
+#remindAt { margin-top: 6px; }
+
+/* 지금 챙길 것 */
+.due { margin-bottom: 12px; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--danger); background: var(--card); }
+.due ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.due li { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.due li span { flex: 1; min-width: 12em; overflow-wrap: anywhere; }
+.due li button { padding: 4px 10px; font-size: 13px; }
+.due small { color: var(--muted); }
+.due a { color: var(--accent); }
+
+/* 할 일 */
+.step { padding: 12px 14px; border-radius: 12px; background: color-mix(in srgb, var(--accent) 10%, var(--card)); border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--line)); margin-bottom: 12px; }
+.step strong { display: block; font-size: 16px; }
+.step p { margin: 6px 0 0; }
+#todoForm { margin-bottom: 4px; }
+.todos { list-style: none; padding: 0; margin: 0; display: grid; gap: 6px; }
+.todo { display: flex; align-items: center; gap: 10px; background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 8px 10px; }
+.todo .ttl { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.todo .ttl small { display: block; color: var(--muted); font-size: 12px; }
+.todo.overdue { border-color: var(--danger); }
+.todo.overdue small { color: var(--danger); }
+.todo.done .ttl { color: var(--muted); text-decoration: line-through; }
+.check { width: 24px; height: 24px; padding: 0; border-radius: 7px; border: 2px solid var(--accent); background: transparent; color: var(--accent); font-weight: 700; flex: none; }
+.todo.done .check { background: var(--accent); color: var(--accent-ink); }
+.icon { background: transparent; padding: 2px 6px; font-size: 15px; }
+details summary { cursor: pointer; color: var(--muted); font-size: 13px; margin: 16px 0 6px; }
+
+/* 북마크 */
+.ltitle { color: var(--accent); font-weight: 600; text-decoration: none; overflow-wrap: anywhere; }
+.ltitle:hover { text-decoration: underline; }
+.site { display: block; font-size: 12px; color: var(--muted); }
+.lsum { font-size: 13px; color: var(--muted); margin-top: 4px !important; }
+.rem { font-size: 12px; color: var(--accent); }
+.remind-menu { margin: 8px 0 0; align-items: center; }
+.remind-menu input { width: auto; padding: 4px 8px; font-size: 13px; }
+
+/* 서랍: 연재 · 보관함 */
+#seriesBar:empty { display: none; }
+#seriesBar { margin-top: 12px; }
+#seriesBar .chips { margin: 0; }
+.series-chip small { color: var(--muted); }
+.series-chip.on small { color: inherit; opacity: 0.8; }
+.series { margin-top: 10px; padding: 4px 12px 12px; border-radius: 12px; background: var(--card); border: 1px solid var(--line); }
+.series h3 { margin: 10px 0; color: var(--ink); font-size: 15px; }
+.kw { padding: 3px 9px; border-radius: 999px; background: var(--chip); font-size: 13px; }
+.kw small { color: var(--muted); }
+.series .spark ul { margin: 8px 0; padding-left: 18px; }
+.timeline { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 8px; }
+.timeline li { display: grid; grid-template-columns: 4.5em 1fr; gap: 8px; }
+.timeline .n { font-weight: 700; color: var(--accent); font-variant-numeric: tabular-nums; }
+.timeline p { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 14px; }
+.gate { margin-top: 10px; padding: 10px 12px; border-radius: 12px; background: var(--chip); }
+.gate p { margin: 0 0 6px; font-size: 13px; }
+.gate.row { margin-top: 10px; font-size: 13px; }
+.memo.locked { border-style: dashed; }
+.lock { font-size: 12px; }
+#pinForm input { min-width: 0; }

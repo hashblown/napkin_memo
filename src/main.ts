@@ -1,78 +1,18 @@
 import "./style.css";
-import { store, settings, type Memo } from "./store";
-import { classifyLocally, inspireLocally, suggestReorgLocally } from "./local";
-import { classify, inspire, suggestReorg, describeError, type ReorgSuggestion } from "./ai";
+import { store, settings, VAULT } from "./store";
+import { vault } from "./vault";
+import { inspireLocally } from "./local";
+import { findUrl, parseSeries } from "./detect";
+import { inspire, describeError } from "./ai";
+import { save, classifyNote, enrichLink } from "./pipeline";
+import { dueItems, notifyDue, REMIND_PRESETS, presetAt } from "./reminders";
+import { $, esc, toast, memoItem, dueLabel, onRerender } from "./ui";
+import { renderTodos } from "./views/todos";
+import { renderLinks } from "./views/links";
+import { renderDrawer } from "./views/drawer";
 
-const $ = <T extends HTMLElement>(sel: string) => document.querySelector<T>(sel)!;
-
-const PRESETS = [
-  "글이 막힐 때",
-  "기획 회의 전",
-  "새 프로젝트를 시작할 때",
-  "마음이 지칠 때",
-  "산책하며 생각 정리",
-  "아무거나 꺼내줘",
-];
-
-// ---------- 공통 ----------
-
-function toast(msg: string) {
-  const el = $("#toast");
-  el.textContent = msg;
-  el.classList.add("show");
-  setTimeout(() => el.classList.remove("show"), 2200);
-}
-
-function esc(s: string) {
-  return s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
-}
-
-function when(ts: number) {
-  const d = new Date(ts);
-  const diff = (Date.now() - ts) / 60000;
-  if (diff < 1) return "방금";
-  if (diff < 60) return `${Math.floor(diff)}분 전`;
-  if (diff < 60 * 24) return `${Math.floor(diff / 60)}시간 전`;
-  return `${d.getMonth() + 1}/${d.getDate()}`;
-}
-
-function memoItem(m: Memo, reason?: string) {
-  const cat = m.classifiedBy === "pending" ? `<span class="cat pending">분류 중…</span>` : `<button class="cat" data-recat="${m.id}">${esc(m.category)}</button>`;
-  const tags = m.tags.map((t) => `<span class="tag">#${esc(t)}</span>`).join("");
-  return `<li class="memo">
-    <p>${esc(m.text)}</p>
-    ${reason ? `<p class="reason">${esc(reason)}</p>` : ""}
-    <div class="meta">${cat}${tags}<span class="time">${when(m.createdAt)}</span>
-      <button class="del" data-del="${m.id}" aria-label="삭제">×</button></div>
-  </li>`;
-}
-
-// 삭제는 두 번 눌러 확정, 분류 이름은 그 자리에서 고친다 (브라우저 팝업 없이)
-document.addEventListener("click", (e) => {
-  const t = e.target as HTMLElement;
-  const del = t.dataset.del;
-  if (del) {
-    if (t.classList.contains("armed")) return store.remove(del);
-    t.classList.add("armed");
-    t.textContent = "지우기";
-    setTimeout(() => {
-      t.classList.remove("armed");
-      t.textContent = "×";
-    }, 3000);
-  }
-  const recat = t.dataset.recat;
-  if (recat) {
-    const input = Object.assign(document.createElement("input"), { className: "cat-edit", value: store.get(recat)?.category ?? "" });
-    t.replaceWith(input);
-    input.focus();
-    input.select();
-    input.addEventListener("keydown", (ev) => {
-      if (ev.key === "Enter" && !ev.isComposing && input.value.trim()) store.update(recat, { category: input.value.trim(), classifiedBy: "user" });
-      if (ev.key === "Escape") render();
-    });
-    input.addEventListener("blur", () => render());
-  }
-});
+const PRESETS = ["글이 막힐 때", "기획 회의 전", "새 프로젝트를 시작할 때", "마음이 지칠 때", "산책하며 생각 정리", "아무거나 꺼내줘"];
+const DAY = 86_400_000;
 
 // ---------- 탭 ----------
 
@@ -80,169 +20,129 @@ function show(tab: string) {
   document.querySelectorAll<HTMLElement>(".tabs button").forEach((b) => b.classList.toggle("on", b.dataset.tab === tab));
   document.querySelectorAll<HTMLElement>(".panel").forEach((p) => p.classList.toggle("on", p.id === tab));
   if (tab === "write") $("#napkin").focus();
-  if (tab === "settings") $<HTMLInputElement>("#apikey").value = settings.get().apiKey;
+  if (tab === "settings") {
+    $<HTMLInputElement>("#apikey").value = settings.get().apiKey;
+    renderPin();
+  }
 }
 document.querySelectorAll<HTMLElement>(".tabs button").forEach((b) => b.addEventListener("click", () => show(b.dataset.tab!)));
 
-// ---------- 적기 + 자동 분류 ----------
-
-async function runClassify(m: Memo) {
-  const { apiKey } = settings.get();
-  if (apiKey && navigator.onLine) {
-    try {
-      const existing = store.categories().filter((c) => c !== "미분류");
-      const r = await classify(apiKey, m.text, existing);
-      store.update(m.id, { ...r, classifiedBy: "ai" });
-      return;
-    } catch (e) {
-      toast(`AI 분류 실패: ${describeError(e)} → 기기 규칙으로 분류`);
-    }
-  }
-  store.update(m.id, { ...classifyLocally(m.text), classifiedBy: "local" });
-}
-
-function save(text: string) {
-  const clean = text.trim();
-  if (!clean) return;
-  const m = store.add(clean);
-  void runClassify(m);
-}
+// ---------- 적기: 연재 이어쓰기 + 링크 리마인드 ----------
 
 const napkin = $<HTMLTextAreaElement>("#napkin");
+let seriesSuggestion = "";
+let remindChoice = "";
+
+/** 첫 줄에 연재 이름을 쓰기 시작하면 다음 회차를 제안한다. 비어 있으면 최근 연재를 보여준다 */
+function renderSuggest() {
+  const v = napkin.value;
+  const box = $("#suggest");
+  const list = store.seriesList();
+  seriesSuggestion = "";
+  if (!list.length || v.includes("\n")) return (box.innerHTML = "");
+  const typed = v.trim();
+  if (!typed) {
+    box.innerHTML = list
+      .slice(0, 3)
+      .map((s) => `<button type="button" class="chip ghost" data-fill="${esc(`${s.name} ${s.last + 1}${s.unit}`)}">✎ ${esc(s.name)} ${s.last + 1}${esc(s.unit)}</button>`)
+      .join("");
+    return;
+  }
+  if (parseSeries(typed)) return (box.innerHTML = "");
+  const hit = list.find((s) => s.name.startsWith(typed) || typed.startsWith(s.name));
+  if (!hit) return (box.innerHTML = "");
+  seriesSuggestion = `${hit.name} ${hit.last + 1}${hit.unit}`;
+  box.innerHTML = `<button type="button" class="chip ghost on" data-fill="${esc(seriesSuggestion)}">✎ ${esc(seriesSuggestion)} <kbd>Tab</kbd></button>`;
+}
+
+function fill(text: string) {
+  napkin.value = `${text}\n`;
+  napkin.focus();
+  napkin.setSelectionRange(napkin.value.length, napkin.value.length);
+  renderSuggest();
+  renderRemindRow();
+}
+
+$("#suggest").addEventListener("click", (e) => {
+  const f = (e.target as HTMLElement).closest<HTMLElement>("[data-fill]")?.dataset.fill;
+  if (f) fill(f);
+});
+
+function renderRemindRow() {
+  const hasUrl = !!findUrl(napkin.value);
+  $("#remindRow").hidden = !hasUrl;
+  if (!hasUrl) return;
+  $("#remindChips").innerHTML = [{ id: "", label: "안 함" }, ...REMIND_PRESETS, { id: "date", label: "날짜 지정" }]
+    .map((p) => `<button type="button" class="chip ${remindChoice === p.id ? "on" : ""}" data-remind="${p.id}">${p.label}</button>`)
+    .join("");
+  $("#remindAt").hidden = remindChoice !== "date";
+}
+
+$("#remindChips").addEventListener("click", (e) => {
+  const r = (e.target as HTMLElement).dataset.remind;
+  if (r === undefined) return;
+  remindChoice = r;
+  renderRemindRow();
+  // 고른 뒤 바로 Enter로 저장할 수 있게 입력칸으로 돌아간다
+  if (r === "date") $("#remindAt").focus();
+  else napkin.focus();
+});
+
+napkin.addEventListener("input", () => {
+  renderSuggest();
+  renderRemindRow();
+});
 napkin.addEventListener("keydown", (e) => {
-  if (e.key === "Enter" && !e.shiftKey && !e.isComposing) {
+  if (e.key === "Tab" && seriesSuggestion) {
+    e.preventDefault();
+    fill(seriesSuggestion);
+  } else if (e.key === "Enter" && !e.shiftKey && !e.isComposing) {
     e.preventDefault();
     $<HTMLFormElement>("#capture").requestSubmit();
   }
 });
-$<HTMLFormElement>("#capture").addEventListener("submit", (e) => {
+$<HTMLFormElement>("#capture").addEventListener("submit", async (e) => {
   e.preventDefault();
-  save(napkin.value);
+  let remindAt: number | null = null;
+  if (remindChoice === "date") {
+    const v = $<HTMLInputElement>("#remindAt").value;
+    remindAt = v ? new Date(v).getTime() : null;
+  } else if (remindChoice) remindAt = presetAt(remindChoice);
+  const m = await save(napkin.value, { remindAt });
+  if (m?.kind === "link") toast(remindAt ? `북마크에 담았어요 · ${dueLabel(remindAt)}에 알려드릴게요` : "북마크에 담았어요");
   napkin.value = "";
+  remindChoice = "";
+  $<HTMLInputElement>("#remindAt").value = "";
+  renderSuggest();
+  renderRemindRow();
   napkin.focus();
 });
 
-// ---------- 서랍 ----------
+// ---------- 지금 챙길 것 (리마인드 · 기한) ----------
 
-let activeCat = "";
-
-function renderDrawer() {
-  const q = $<HTMLInputElement>("#search").value.trim().toLowerCase();
-  const cats = store.categories();
-  if (activeCat && !cats.includes(activeCat)) activeCat = "";
-  $("#cats").innerHTML = ["", ...cats]
-    .map((c) => `<button class="chip ${c === activeCat ? "on" : ""}" data-cat="${esc(c)}">${c ? esc(c) : "전체"}</button>`)
-    .join("");
-  const list = store.all().filter(
-    (m) =>
-      (!activeCat || m.category === activeCat) &&
-      (!q || [m.text, m.category, ...m.tags, ...m.useWhen].join(" ").toLowerCase().includes(q)),
+function renderDue() {
+  const { now, today } = dueItems();
+  const rows = now.map((d) =>
+    d.kind === "link"
+      ? `<li><span>🔗 <a href="${esc(d.memo.link!.url)}" target="_blank" rel="noopener">${esc(d.memo.link!.title || d.memo.link!.site)}</a></span>
+          <button data-due-snooze="link:${d.memo.id}">내일 다시</button><button class="primary" data-due-ok="link:${d.memo.id}">봤어요</button></li>`
+      : `<li><span>☐ ${esc(d.todo.title)} <small>${dueLabel(d.todo.due!, d.todo.hasTime)}</small></span>
+          <button data-due-snooze="todo:${d.todo.id}">내일 다시</button><button class="primary" data-due-ok="todo:${d.todo.id}">완료</button></li>`,
   );
-  $("#list").innerHTML = list.map((m) => memoItem(m)).join("") || `<li class="empty">아직 비어 있어요.</li>`;
-  $("#renamecat").hidden = !activeCat;
+  $("#dueNow").innerHTML =
+    rows.length || today.length
+      ? `<div class="due"><span class="eyebrow">지금 챙길 것${today.length ? ` · 오늘 ${today.length}개 더` : ""}</span>${rows.length ? `<ul>${rows.join("")}</ul>` : ""}</div>`
+      : "";
 }
 
-// 분류 만들기 · 이름 바꾸기 (같은 폼을 같이 쓴다)
-let catMode: "add" | "rename" = "add";
-function openCatForm(mode: "add" | "rename") {
-  catMode = mode;
-  $("#catform").hidden = false;
-  const input = $<HTMLInputElement>("#catname");
-  input.value = mode === "rename" ? activeCat : "";
-  input.placeholder = mode === "rename" ? "새 이름 (기존 분류 이름이면 합쳐져요)" : "새 분류 이름";
-  input.focus();
-}
-$("#addcat").addEventListener("click", () => openCatForm("add"));
-$("#renamecat").addEventListener("click", () => openCatForm("rename"));
-$("#catcancel").addEventListener("click", () => ($("#catform").hidden = true));
-$<HTMLFormElement>("#catform").addEventListener("submit", (e) => {
-  e.preventDefault();
-  const name = $<HTMLInputElement>("#catname").value.trim();
-  if (!name) return;
-  if (catMode === "add") {
-    store.addCategory(name);
-    toast(`'${name}' 분류를 만들었어요`);
-  } else if (name !== activeCat) {
-    store.renameCategory(activeCat, name);
-    activeCat = name;
-    toast("이름을 바꿨어요");
-  }
-  $("#catform").hidden = true;
-  renderDrawer();
+$("#dueNow").addEventListener("click", (e) => {
+  const t = e.target as HTMLElement;
+  const [kind, id] = (t.dataset.dueOk ?? t.dataset.dueSnooze ?? "").split(":");
+  if (!id) return;
+  const tomorrow = new Date(Date.now() + DAY).setHours(9, 0, 0, 0);
+  if (t.dataset.dueOk) kind === "link" ? store.update(id, { reminded: true }) : store.updateTodo(id, { done: true });
+  else kind === "link" ? store.update(id, { remindAt: tomorrow }) : store.updateTodo(id, { snoozedUntil: tomorrow });
 });
-
-// AI 정리 제안: 메모 전체의 경향을 보고 새 분류 + 옮길 메모를 추천
-let suggestion: ReorgSuggestion | null = null;
-
-$("#reorg").addEventListener("click", async () => {
-  const memos = store.all().filter((m) => m.classifiedBy !== "pending");
-  const box = $("#reorgbox");
-  box.hidden = false;
-  if (memos.length < 3) {
-    box.innerHTML = `<p class="muted">메모가 조금 더 쌓이면 경향을 볼 수 있어요.</p>`;
-    return;
-  }
-  box.innerHTML = `<p class="muted">메모 ${memos.length}개의 경향을 살펴보는 중…</p>`;
-  const { apiKey } = settings.get();
-  suggestion = null;
-  if (apiKey && navigator.onLine) {
-    try {
-      suggestion = await suggestReorg(apiKey, memos, store.categories());
-    } catch (e) {
-      toast(`AI 실패: ${describeError(e)} → 기기 규칙으로 제안`);
-    }
-  }
-  suggestion ??= suggestReorgLocally(memos, store.categories());
-  renderSuggestion();
-});
-
-function renderSuggestion() {
-  const box = $("#reorgbox");
-  if (!suggestion || (!suggestion.newCategories.length && !suggestion.moves.length)) {
-    box.innerHTML = `<p class="muted">지금 분류가 잘 맞아요. 바꿀 만한 게 없어요.</p><div class="row"><span></span><button data-reorg="close">닫기</button></div>`;
-    return;
-  }
-  const cats = suggestion.newCategories
-    .map((c) => `<label class="sug"><input type="checkbox" checked data-newcat="${esc(c.name)}" /><span><b>${esc(c.name)}</b><small>${esc(c.reason)}</small></span></label>`)
-    .join("");
-  const moves = suggestion.moves
-    .flatMap((mv) => {
-      const m = store.get(mv.id);
-      if (!m) return [];
-      const snippet = m.text.length > 40 ? `${m.text.slice(0, 40)}…` : m.text;
-      return `<label class="sug"><input type="checkbox" checked data-move="${mv.id}" data-to="${esc(mv.to)}" /><span>${esc(snippet)}<small>${esc(m.category)} → <b>${esc(mv.to)}</b> · ${esc(mv.reason)}</small></span></label>`;
-    })
-    .join("");
-  box.innerHTML = `
-    ${cats ? `<h3>새 분류 제안</h3>${cats}` : ""}
-    ${moves ? `<h3>옮기면 좋을 메모</h3>${moves}` : ""}
-    <div class="row"><button data-reorg="close">닫기</button><button class="primary" data-reorg="apply">선택한 것 적용</button></div>`;
-}
-
-$("#reorgbox").addEventListener("click", (e) => {
-  const action = (e.target as HTMLElement).dataset.reorg;
-  const box = $("#reorgbox");
-  if (action === "close") box.hidden = true;
-  if (action !== "apply" || !suggestion) return;
-  const checked = (sel: string) => [...box.querySelectorAll<HTMLInputElement>(sel)].filter((i) => i.checked);
-  const newCats = checked("[data-newcat]").map((i) => i.dataset.newcat!);
-  // 새 분류를 뺐다면 그 분류로 가는 이동도 뺀다
-  const rejected = new Set(suggestion.newCategories.map((c) => c.name).filter((n) => !newCats.includes(n)));
-  const moves = checked("[data-move]")
-    .map((i) => ({ id: i.dataset.move!, to: i.dataset.to! }))
-    .filter((mv) => !rejected.has(mv.to));
-  store.apply(newCats, moves);
-  box.hidden = true;
-  toast(`분류 ${newCats.length}개 추가, 메모 ${moves.length}개 옮겼어요`);
-});
-$("#cats").addEventListener("click", (e) => {
-  const c = (e.target as HTMLElement).dataset.cat;
-  if (c !== undefined) {
-    activeCat = c;
-    renderDrawer();
-  }
-});
-$("#search").addEventListener("input", renderDrawer);
 
 // ---------- 영감 ----------
 
@@ -260,7 +160,7 @@ $<HTMLFormElement>("#ask").addEventListener("submit", (e) => {
 });
 
 async function runInspire(situation: string) {
-  const memos = store.all();
+  const memos = store.forAI(); // 잠긴 메모는 영감 후보에서도 제외
   if (!memos.length) {
     $("#spark").innerHTML = `<p class="muted">먼저 몇 가지 적어두면 여기서 꺼내드릴게요.</p>`;
     $("#picks").innerHTML = "";
@@ -293,11 +193,46 @@ $<HTMLFormElement>("#keyform").addEventListener("submit", (e) => {
 });
 $("#reclassify").addEventListener("click", async () => {
   if (!settings.get().apiKey) return toast("먼저 API 키를 넣어주세요");
-  const targets = store.all().filter((m) => m.classifiedBy === "local" || m.classifiedBy === "pending");
+  const targets = store.forAI().filter((m) => m.classifiedBy === "local");
   toast(`${targets.length}개 다시 분류 중…`);
-  for (const m of targets) await runClassify(m);
+  for (const m of targets) await (m.kind === "link" ? enrichLink(m) : classifyNote(m));
   toast("다시 분류했어요");
 });
+
+function renderPin() {
+  const area = $("#pinArea");
+  if (vault.hasPin()) {
+    const n = store.all().filter((m) => m.locked).length;
+    area.innerHTML = `<p class="muted">🔒 잠긴 메모 ${n}개가 암호화되어 있어요. ${vault.isOpen() ? "지금 열려 있어요." : "PIN으로만 열 수 있어요."}</p>
+      ${vault.isOpen() ? `<button data-vault-lock>지금 잠그기</button>` : ""}`;
+    return;
+  }
+  area.innerHTML = `<p class="muted">비밀번호·계좌 같은 메모는 자동으로 <b>${VAULT}</b>에 들어가고 AI로 보내지 않아요.
+    PIN을 정하면 잠긴 메모를 암호화하고, 앱 안에서 PIN으로만 열 수 있어요. <b>PIN을 잊으면 복구할 수 없어요.</b> 6자리 이상을 권해요.</p>
+    <form id="pinForm" class="row"><input id="pin1" type="password" inputmode="numeric" placeholder="새 PIN" autocomplete="new-password" />
+    <input id="pin2" type="password" inputmode="numeric" placeholder="한 번 더" autocomplete="new-password" /><button class="primary">정하기</button></form>`;
+}
+$("#pinArea").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const [a, b] = [$<HTMLInputElement>("#pin1").value, $<HTMLInputElement>("#pin2").value];
+  if (a.length < 4) return toast("PIN은 4자리 이상이어야 해요");
+  if (a !== b) return toast("두 PIN이 달라요");
+  await vault.setPin(a);
+  toast("PIN을 정했어요. 잠긴 메모를 암호화했어요");
+  renderPin();
+});
+$("#pinArea").addEventListener("click", (e) => {
+  if ((e.target as HTMLElement).dataset.vaultLock !== undefined) vault.lock();
+});
+
+$("#notifyOn").addEventListener("click", async () => {
+  if (!("Notification" in window)) return toast("이 브라우저는 알림을 지원하지 않아요. 캘린더 버튼을 써주세요");
+  const p = await Notification.requestPermission();
+  toast(p === "granted" ? "알림을 켰어요" : "알림이 허용되지 않았어요");
+  void notifyDue();
+});
+$("#shareBase").textContent = `${location.origin}${location.pathname}?q=`;
+
 $("#export").addEventListener("click", () => {
   const url = URL.createObjectURL(new Blob([store.exportJson()], { type: "application/json" }));
   const a = Object.assign(document.createElement("a"), { href: url, download: `napkin-${new Date().toISOString().slice(0, 10)}.json` });
@@ -317,51 +252,83 @@ $<HTMLInputElement>("#import").addEventListener("change", async (e) => {
 // ---------- 렌더 ----------
 
 function render() {
+  const widget = document.body.classList.contains("widget");
   $("#recent").innerHTML = store
     .all()
-    .slice(0, document.body.classList.contains("widget") ? 3 : 8)
+    .filter((m) => !m.locked)
+    .slice(0, widget ? 3 : 8)
     .map((m) => memoItem(m))
     .join("");
+  renderDue();
+  renderTodos();
+  renderLinks();
   renderDrawer();
 }
+onRerender(render);
 store.subscribe(render);
-if (import.meta.env.VITE_DEMO) seedDemo();
-render();
+vault.subscribe(() => {
+  render();
+  if ($("#settings").classList.contains("on")) renderPin();
+});
 
-// ---------- 시작 옵션: ?widget, ?q=… ----------
+// ---------- 시작 옵션: ?widget, ?q=…, 공유(title/text/url) ----------
 
 const params = new URLSearchParams(location.search);
 if (params.has("widget")) document.body.classList.add("widget");
+if (import.meta.env.VITE_DEMO) seedDemo();
+render();
+renderSuggest();
+
 // 저장만 되고 분류가 끝나기 전에 창이 닫힌 메모 이어서 분류
-store.all().filter((m) => m.classifiedBy === "pending").forEach((m) => void runClassify(m));
-const quick = params.get("q");
+store
+  .all()
+  .filter((m) => m.classifiedBy === "pending" && !m.locked)
+  .forEach((m) => void classifyNote(m));
+
+const shared = [params.get("title"), params.get("text"), params.get("url")].filter((x): x is string => !!x?.trim());
+const quick = params.get("q") ?? (shared.length ? [...new Set(shared)].join("\n") : null);
 if (quick) {
-  save(quick);
-  toast("냅킨에 적었어요");
-  params.delete("q");
+  void save(quick).then((m) => toast(m?.kind === "link" ? "북마크에 담았어요" : "냅킨에 적었어요"));
+  ["q", "title", "text", "url"].forEach((k) => params.delete(k));
   history.replaceState(null, "", `${location.pathname}${params.size ? `?${params}` : ""}`);
 }
-render();
+
+// 리마인드: 1분마다, 그리고 앱으로 돌아올 때 확인
+function tick() {
+  renderDue();
+  void notifyDue();
+}
+setInterval(tick, 60_000);
+document.addEventListener("visibilitychange", () => !document.hidden && (render(), tick()));
+tick();
 
 if ("serviceWorker" in navigator && import.meta.env.PROD && !import.meta.env.VITE_DEMO) {
   navigator.serviceWorker.register("./sw.js").catch(() => {});
 }
 
-// 미리보기 전용: 처음 열면 예시 메모를 채워 둔다
+// ---------- 미리보기 전용 예시 데이터 ----------
+
 function seedDemo() {
   document.body.classList.add("demo");
   if (store.all().length) return;
   const H = 3600_000;
-  const examples: [string, string, string[], string[], number][] = [
-    ["카페 옆자리 사람들이 노트북 대신 종이에 적고 있었다. 손으로 쓰면 생각이 느려져서 좋은 걸까?", "관찰", ["카페", "손글씨"], ["사람을 이해하고 싶을 때", "글이 막힐 때"], 2],
-    ["동네 카페 리뷰를 한 장짜리 지도로 모아보는 서비스", "사업·기획", ["카페", "동네"], ["기획 회의 전", "새 프로젝트를 시작할 때"], 20],
-    ["제목 후보: 냅킨의 철학", "글감", ["제목", "글쓰기"], ["글이 막힐 때", "콘텐츠 주제가 필요할 때"], 30],
-    ["비 오는 날엔 창가 자리부터 찬다. 사람들은 비를 보는 걸 좋아한다", "관찰", ["카페", "날씨"], ["공간을 기획할 때", "새로운 관점이 필요할 때"], 50],
-    ["완벽하게 쓰려다 아무것도 못 쓴 날. 일단 적고 나중에 고치자", "마음·성찰", ["글쓰기", "습관"], ["마음이 지칠 때", "글이 막힐 때"], 70],
-    ["발표는 질문 하나로 시작하면 사람들이 고개를 든다", "배움", ["발표"], ["발표를 준비할 때", "기획 회의 전"], 120],
-  ];
-  for (const [text, category, tags, useWhen, hoursAgo] of examples.reverse()) {
-    const m = store.add(text);
-    store.update(m.id, { category, tags, useWhen, classifiedBy: "local", createdAt: Date.now() - hoursAgo * H });
-  }
+  const now = Date.now();
+  const add = (hoursAgo: number, init: Parameters<typeof store.add>[0]) => store.add({ classifiedBy: "local", createdAt: now - hoursAgo * H, ...init });
+
+  add(300, { kind: "note", text: "레클 25회차\n워밍업 후 e벽 초록 7회\n- 발 체중 먼저 싣고 손 올리기\n- 팔 펴고 쉬기", category: "운동", tags: ["클라이밍"], series: { name: "레클", n: 25, unit: "회차" } });
+  add(200, { kind: "note", text: "레클 26회차\n노랑 도전 but 후반 실패\n- 쳐야 할 때 심호흡\n- 발 체중 싣는 걸 또 까먹음", category: "운동", tags: ["클라이밍"], series: { name: "레클", n: 26, unit: "회차" } });
+  add(100, { kind: "note", text: "레클 27회차\n초록 3회 노랑 3회\n- 노랑 시작 홀드에서 발 체중 싣기\n- 팔 펴고 쉬기 잘 됨", category: "운동", tags: ["클라이밍"], series: { name: "레클", n: 27, unit: "회차" } });
+  add(90, { kind: "link", text: "침대 후보", link: { url: "https://www.iloom.com/product/detail.do?productCd=HBA201501", site: "iloom.com", title: "침대 후보" }, category: "쇼핑" });
+  add(80, { kind: "link", text: "", link: { url: "https://brunch.co.kr/@socandy/47", site: "brunch.co.kr", title: "서비스 기획자를 위한 지표 안내서" }, category: "읽을거리", remindAt: now - 10 * 60_000 });
+  add(60, { kind: "link", text: "스테이 숙소", link: { url: "https://www.airbnb.co.kr/", site: "airbnb.co.kr", title: "스테이 숙소" }, category: "여행·숙소", remindAt: new Date(now + DAY).setHours(9, 0, 0, 0) });
+  add(50, { kind: "link", text: "", link: { url: "https://youtu.be/NuZYuzPGxzA", site: "youtu.be" }, category: "영상" });
+  add(30, { kind: "note", text: "사이드프로젝트 아이디어\n나만의 대나무숲", category: "사업·기획", tags: ["사이드프로젝트"] });
+  add(20, { kind: "note", text: "카페 옆자리 사람들이 노트북 대신 종이에 적고 있었다. 손으로 쓰면 생각이 느려져서 좋은 걸까?", category: "관찰", tags: ["카페", "손글씨"] });
+  add(10, { kind: "note", text: "예시) 증권 앱 id: 예시계정 / pw: 예시비번", category: VAULT, classifiedBy: "user", locked: true });
+  const m = add(5, { kind: "note", text: "금요일 3시 치과 예약 확인\n보험금 청구하기\n임대차계약서 서류 확인", category: "생활" });
+
+  store.addTodo({ title: "치과 예약 확인", due: new Date(now + 2 * DAY).setHours(15, 0, 0, 0), hasTime: true, memoId: m.id });
+  store.addTodo({ title: "보험금 청구하기", due: null, hasTime: false, memoId: m.id });
+  store.addTodo({ title: "임대차계약서 서류 확인", due: null, hasTime: false, memoId: m.id });
+  store.addTodo({ title: "UX 리서치 밋업 신청", due: now - 2 * H, hasTime: true });
 }

@@ -26,26 +26,132 @@ const Classification = z.object({
   category: z.string().describe("짧은 한국어 분류명 (2~6글자). 기존 분류가 맞으면 그대로 재사용"),
   tags: z.array(z.string()).describe("핵심 키워드 1~4개"),
   useWhen: z.array(z.string()).describe("이 메모가 영감이 될 만한 구체적 상황 2~3개"),
+  todos: z
+    .array(
+      z.object({
+        title: z.string().describe("짧은 할 일 문장 (예: '임대차계약서 서류 확인')"),
+        due: z.string().describe("기한. 'YYYY-MM-DD' 또는 'YYYY-MM-DDTHH:mm'. 기한이 없으면 빈 문자열"),
+      }),
+    )
+    .describe("메모에서 사용자가 실제로 해야 할 일. 일정·약속·마감·입금·예약·챙길 것 등. 감상·배운 점·조언은 넣지 않는다. 없으면 빈 배열"),
 });
+
+/** 오늘 날짜를 알려줘야 '내일', '다음 주' 같은 말을 날짜로 바꿀 수 있다 */
+function nowLine() {
+  const d = new Date();
+  const days = "일월화수목금토";
+  return `지금: ${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")} (${days[d.getDay()]}) ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+}
+
+export function parseDueString(due: string): { due: number; hasTime: boolean } | null {
+  const m = due.match(/^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2}))?/);
+  if (!m) return null;
+  const d = new Date(+m[1], +m[2] - 1, +m[3], m[4] ? +m[4] : 9, m[5] ? +m[5] : 0);
+  return isNaN(d.getTime()) ? null : { due: d.getTime(), hasTime: !!m[4] };
+}
 
 export async function classify(apiKey: string, text: string, existing: string[]) {
   const res = await client(apiKey).beta.messages.parse({
     model: MODEL,
-    max_tokens: 2048,
+    max_tokens: 4096,
     output_config: { effort: "low", format: betaZodOutputFormat(Classification) },
     ...FALLBACK,
     system:
       "사용자가 불현듯 떠오른 생각을 냅킨에 적듯 급히 적은 메모를 정리하는 조수다. " +
       "메모를 하나의 분류로 묶고, 나중에 어떤 상황에서 이 메모를 다시 꺼내 보면 좋을지 적는다. " +
+      "메모 안에 해야 할 일이 있으면 할 일로 뽑고, 날짜나 시각이 있으면 기한으로 바꾼다. " +
       "분류는 너무 잘게 쪼개지 말고, 기존 분류 중 맞는 것이 있으면 재사용한다. 모든 출력은 한국어로.",
     messages: [
       {
         role: "user",
-        content: `기존 분류: ${existing.length ? existing.join(", ") : "(없음)"}\n\n메모:\n${text}`,
+        content: `${nowLine()}\n기존 분류: ${existing.length ? existing.join(", ") : "(없음)"}\n\n메모:\n${text}`,
       },
     ],
   });
   if (res.stop_reason === "refusal" || !res.parsed_output) throw new Error("분류하지 못했어요.");
+  return res.parsed_output;
+}
+
+const LinkMeta = z.object({
+  title: z.string().describe("페이지 제목 (짧게)"),
+  summary: z.string().describe("무슨 페이지인지 한 문장 요약"),
+  category: z.string().describe("짧은 분류명 (예: 쇼핑, 여행·숙소, 커리어, 읽을거리, 영상, 장소). 기존 분류가 맞으면 재사용"),
+});
+
+/** 링크 페이지를 읽어 제목·요약·분류를 만든다 (Claude의 웹 페이지 읽기 도구 사용) */
+export async function describeLink(apiKey: string, url: string, note: string, existing: string[]) {
+  const c = client(apiKey);
+  const messages: Anthropic.Beta.BetaMessageParam[] = [
+    {
+      role: "user",
+      content:
+        `이 링크가 어떤 페이지인지 읽고 북마크로 정리해줘. 페이지를 읽을 수 없으면 주소와 메모만 보고 추정해.\n` +
+        `기존 북마크 분류: ${existing.join(", ") || "(없음)"}\n링크: ${url}\n사용자 메모: ${note || "(없음)"}`,
+    },
+  ];
+  // 서버 도구가 길어지면 pause_turn으로 멈출 수 있다 → 이어서 요청 (최대 3번)
+  for (let i = 0; i < 3; i++) {
+    const res = await c.beta.messages.parse({
+      model: MODEL,
+      max_tokens: 4096,
+      output_config: { effort: "low", format: betaZodOutputFormat(LinkMeta) },
+      ...FALLBACK,
+      tools: [{ type: "web_fetch_20260209", name: "web_fetch", max_uses: 1 }],
+      system: "사용자가 저장한 링크를 북마크로 정리하는 조수다. 한국어로 답한다.",
+      messages,
+    });
+    if (res.stop_reason === "pause_turn") {
+      messages.splice(1, messages.length - 1, { role: "assistant", content: res.content as Anthropic.Beta.BetaContentBlockParam[] });
+      continue;
+    }
+    if (res.stop_reason === "refusal" || !res.parsed_output) break;
+    return res.parsed_output;
+  }
+  throw new Error("링크를 정리하지 못했어요.");
+}
+
+const Step = z.object({
+  step: z.string().describe("10~30분 안에 바로 할 수 있는 구체적인 첫 행동 한 문장"),
+});
+
+/** 기한 없는 할 일에 대해 '지금 해볼 첫 행동'을 제안한다 */
+export async function nextStep(apiKey: string, title: string, context: string) {
+  const res = await client(apiKey).beta.messages.parse({
+    model: MODEL,
+    max_tokens: 2048,
+    output_config: { effort: "low", format: betaZodOutputFormat(Step) },
+    ...FALLBACK,
+    system: "미뤄둔 할 일을 작게 쪼개서 지금 바로 시작하게 돕는 조수다. 한국어로, 부담 없는 말투로.",
+    messages: [{ role: "user", content: `할 일: ${title}${context ? `\n원래 메모: ${context}` : ""}` }],
+  });
+  if (res.stop_reason === "refusal" || !res.parsed_output) throw new Error("제안을 만들지 못했어요.");
+  return res.parsed_output.step;
+}
+
+const Patterns = z.object({
+  summary: z.string().describe("이 연재 기록 전체에서 보이는 흐름·성장을 2~3문장으로"),
+  recurring: z
+    .array(z.object({ keyword: z.string(), count: z.number().describe("등장한 기록 수"), note: z.string().describe("무엇이 반복되는지 한 문장") }))
+    .describe("여러 회차에 반복해서 나오는 키워드·지적·주제 3~6개. 많이 나온 순"),
+  focus: z.string().describe("다음 회차 전에 신경 쓸 한 가지"),
+});
+
+/** 연재 기록을 묶어 반복되는 키워드와 흐름을 뽑는다 */
+export async function seriesPatterns(apiKey: string, name: string, entries: { n: number; date: string; text: string }[]) {
+  const res = await client(apiKey).beta.messages.parse({
+    model: MODEL,
+    max_tokens: 8000,
+    output_config: { effort: "medium", format: betaZodOutputFormat(Patterns) },
+    ...FALLBACK,
+    system: "사용자가 회차별로 남긴 연습·수업·운동 기록을 읽고 반복되는 패턴을 찾아주는 코치다. 한국어로 답한다.",
+    messages: [
+      {
+        role: "user",
+        content: `연재 이름: ${name}\n\n${entries.map((e) => `[${e.n}회 · ${e.date}]\n${e.text}`).join("\n\n")}`,
+      },
+    ],
+  });
+  if (res.stop_reason === "refusal" || !res.parsed_output) throw new Error("패턴을 찾지 못했어요.");
   return res.parsed_output;
 }
 
