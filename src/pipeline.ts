@@ -159,3 +159,63 @@ export async function enrichLink(m: Memo) {
     return false;
   }
 }
+
+// ---------- 메모 고치기 ----------
+
+/**
+ * 이미 적은 메모를 고친다.
+ * - 잠긴 메모: 보관함이 열려 있을 때만, 고친 뒤 다시 잠근다
+ * - 링크: 메모(설명)를 고치고, 주소가 바뀌면 새 주소로
+ * - 일반 메모: 민감정보가 새로 생기면 보관함으로. 아니면 다시 나누고 할 일도 다시 찾는다
+ *   (내가 직접 고친 분류는 그대로 둔다)
+ */
+export async function editMemo(id: string, raw: string): Promise<boolean> {
+  const m = store.get(id);
+  const text = raw.trim();
+  if (!m || !text) return false;
+
+  if (m.locked) {
+    if (vault.read(m) === null) {
+      toast("먼저 보관함을 열어주세요");
+      return false;
+    }
+    store.update(id, { text, cipher: undefined });
+    await vault.seal(store.get(id)!);
+    toast("고쳤어요 🔒");
+    return true;
+  }
+
+  if (m.kind === "link" && m.link) {
+    const link = asLink(text);
+    const url = link?.url ?? m.link.url;
+    const note = link ? link.note : text.replace(m.link.url, "").trim();
+    const moved = url !== m.link.url;
+    store.update(id, {
+      text: note,
+      link: moved ? { url, site: siteOf(url), title: note || undefined } : { ...m.link, title: m.classifiedBy === "ai" ? m.link.title : note || m.link.title },
+      classifiedBy: m.classifiedBy === "user" ? "user" : "local",
+    });
+    toast("고쳤어요");
+    void maybeBatch();
+    return true;
+  }
+
+  const sensitive = detectSensitive(text);
+  if (sensitive) {
+    store.update(id, { text });
+    await vault.seal(store.get(id)!, VAULT);
+    toast(`🔒 ${sensitive} 정보가 있어 보관함으로 옮겼어요`);
+    return true;
+  }
+
+  store.update(id, { text, series: parseSeries(text) ?? undefined });
+  const cur = store.get(id)!;
+  if (cur.classifiedBy === "user") {
+    // 분류는 그대로, 할 일만 다시 찾는다
+    replaceTodos(cur, extractTodosLocally(text), true);
+  } else classifyNote(cur);
+  const todos = store.todos().filter((t) => t.memoId === id && !t.done).length;
+  toast(todos ? `고쳤어요 · 할 일 ${todos}개` : "고쳤어요");
+  void maybeBatch();
+  return true;
+}

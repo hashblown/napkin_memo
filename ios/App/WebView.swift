@@ -19,6 +19,13 @@ struct WebView: UIViewRepresentable {
         web.isOpaque = false
         web.backgroundColor = .clear
         web.scrollView.contentInsetAdjustmentBehavior = .never
+        // 확대 · 가로 스크롤 없이 세로 스크롤만
+        web.scrollView.delegate = context.coordinator
+        web.scrollView.minimumZoomScale = 1
+        web.scrollView.maximumZoomScale = 1
+        web.scrollView.bouncesZoom = false
+        web.scrollView.alwaysBounceHorizontal = false
+        web.scrollView.showsHorizontalScrollIndicator = false
         web.allowsBackForwardNavigationGestures = false
         #if DEBUG
         web.isInspectable = true // 맥 사파리 › 개발 메뉴에서 디버깅
@@ -32,13 +39,21 @@ struct WebView: UIViewRepresentable {
 
     func updateUIView(_ uiView: WKWebView, context: Context) {}
 
-    final class Coordinator: NSObject, WKScriptMessageHandler, WKNavigationDelegate, WKUIDelegate {
+    final class Coordinator: NSObject, WKScriptMessageHandler, WKNavigationDelegate, WKUIDelegate, UIScrollViewDelegate {
         let model: AppModel
         init(model: AppModel) { self.model = model }
 
         func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
             let body = message.body
             Task { @MainActor in model.receive(body) }
+        }
+
+        /// 두 손가락으로 벌려도 확대되지 않게
+        func viewForZooming(in scrollView: UIScrollView) -> UIView? { nil }
+
+        /// 가로로 밀려도 제자리
+        func scrollViewDidScroll(_ scrollView: UIScrollView) {
+            if scrollView.contentOffset.x != 0 { scrollView.contentOffset.x = 0 }
         }
 
         /// 다른 사이트 링크는 사파리 등 바깥에서 연다

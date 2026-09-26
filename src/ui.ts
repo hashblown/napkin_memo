@@ -40,6 +40,15 @@ export function dueLabel(at: number, hasTime = true) {
   return date + time;
 }
 
+/** 지금 고치는 중인 메모 (목록이 다시 그려져도 고치던 글이 남도록) */
+export const editing: { id: string; draft: string } = { id: "", draft: "" };
+
+/** 고칠 때 보여줄 원래 글: 링크는 주소와 메모를 함께 */
+export function editableText(m: Memo) {
+  const text = vault.read(m) ?? "";
+  return m.kind === "link" && m.link ? [m.link.url, text].filter(Boolean).join("\n") : text;
+}
+
 export function memoItem(m: Memo, reason?: string) {
   const text = vault.read(m);
   const lock = m.locked ? `<span class="lock" title="잠긴 메모">🔒</span>` : "";
@@ -49,7 +58,10 @@ export function memoItem(m: Memo, reason?: string) {
       : `<button class="cat" data-recat="${m.id}" title="분류 고치기">${esc(m.category)} <span class="fix-hint">✎</span></button>`;
   const tags = m.tags.map((t) => `<span class="tag">#${esc(t)}</span>`).join("");
   let body: string;
-  if (text === null) body = `<p class="muted">잠긴 메모예요. 서랍 › ${esc(m.category)}에서 PIN으로 열 수 있어요.</p>`;
+  if (editing.id === m.id)
+    body = `<textarea class="edit-area" data-edit-area="${m.id}" rows="3">${esc(editing.draft)}</textarea>
+      <div class="row edit-row"><button type="button" data-edit-cancel>취소</button><button type="button" class="primary" data-edit-save="${m.id}">고치기</button></div>`;
+  else if (text === null) body = `<p class="muted">잠긴 메모예요. 서랍 › ${esc(m.category)}에서 PIN으로 열 수 있어요.</p>`;
   else if (m.kind === "link" && m.link)
     body = `<a class="ltitle" href="${esc(m.link.url)}" target="_blank" rel="noopener">🔗 ${esc(m.link.title || m.link.site)}</a>
       ${m.link.summary ? `<p class="lsum">${esc(m.link.summary)}</p>` : ""}${text && text !== m.link.title ? `<p>${esc(text)}</p>` : ""}`;
@@ -58,6 +70,7 @@ export function memoItem(m: Memo, reason?: string) {
     ${body}
     ${reason ? `<p class="reason">${esc(reason)}</p>` : ""}
     <div class="meta">${lock}${cat}${tags}<span class="time">${when(m.createdAt)}</span>
+      ${text !== null && editing.id !== m.id ? `<button class="edit" data-edit="${m.id}">수정</button>` : ""}
       <button class="del" data-del="${m.id}" aria-label="삭제">×</button></div>
   </li>`;
 }
@@ -157,4 +170,28 @@ document.addEventListener("click", async (e) => {
       toast(d ? `할 일로 넣었어요 · ${dueLabel(d.due, d.hasTime)}` : "할 일로 넣었어요");
     }
   }
+});
+
+// ---------- 메모 고치기: 카드 안에서 바로 ----------
+
+document.addEventListener("click", (e) => {
+  const t = (e.target as HTMLElement).closest<HTMLElement>("[data-edit],[data-edit-cancel]");
+  if (!t) return;
+  if (t.dataset.edit) {
+    const m = store.get(t.dataset.edit);
+    if (!m) return;
+    editing.id = m.id;
+    editing.draft = editableText(m);
+    rerender();
+    const area = document.querySelector<HTMLTextAreaElement>(`[data-edit-area="${m.id}"]`);
+    area?.focus();
+    area?.setSelectionRange(area.value.length, area.value.length);
+  } else {
+    editing.id = "";
+    rerender();
+  }
+});
+document.addEventListener("input", (e) => {
+  const t = e.target as HTMLTextAreaElement;
+  if (t.dataset?.editArea) editing.draft = t.value;
 });

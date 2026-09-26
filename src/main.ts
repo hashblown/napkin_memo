@@ -4,9 +4,9 @@ import { vault } from "./vault";
 import { inspireLocally } from "./local";
 import { findUrl } from "./detect";
 import { inspire, describeError } from "./ai";
-import { save, classifyNote, runBatch, maybeBatch, pendingForAI, onBatchChange, isBatchRunning, DEFAULT_BATCH } from "./pipeline";
+import { save, editMemo, classifyNote, runBatch, maybeBatch, pendingForAI, onBatchChange, isBatchRunning, DEFAULT_BATCH } from "./pipeline";
 import { dueItems, notifyDue, REMIND_PRESETS, presetAt } from "./reminders";
-import { $, esc, toast, memoItem, dueLabel, onRerender } from "./ui";
+import { $, esc, toast, memoItem, dueLabel, onRerender, editing } from "./ui";
 import { renderTodos } from "./views/todos";
 import { renderLinks } from "./views/links";
 import { renderDrawer } from "./views/drawer";
@@ -16,27 +16,117 @@ import { FONTS, applyFont, fontById, loadPreviews } from "./fonts";
 const PRESETS = ["글이 막힐 때", "기획 회의 전", "새 프로젝트를 시작할 때", "마음이 지칠 때", "산책하며 생각 정리", "아무거나 꺼내줘"];
 const DAY = 86_400_000;
 
+// ---------- 화면 고정: 확대 · 가로 스크롤 막기 (세로 스크롤만) ----------
+// iOS 사파리는 viewport의 user-scalable=no를 무시하므로 두 손가락 제스처를 직접 막는다
+for (const type of ["gesturestart", "gesturechange", "gestureend"]) document.addEventListener(type, (e) => e.preventDefault(), { passive: false });
+document.addEventListener("touchmove", (e) => e.touches.length > 1 && e.preventDefault(), { passive: false });
+
 // ---------- 탭 (+ 설정은 오른쪽 위 톱니) ----------
 
 function show(tab: string) {
   document.querySelectorAll<HTMLElement>(".tabs button").forEach((b) => b.classList.toggle("on", b.dataset.tab === tab));
   document.querySelectorAll<HTMLElement>(".panel").forEach((p) => p.classList.toggle("on", p.id === tab));
   $("#openSettings").classList.toggle("on", tab === "settings");
-  if (tab === "settings") {
-    $<HTMLInputElement>("#apikey").value = settings.get().apiKey;
-    renderAi();
-    renderPin();
-    renderFonts();
-  }
+  if (tab === "settings") openSettingsPage(null);
   window.scrollTo({ top: 0 });
 }
+
+/** 설정 첫 화면은 항목 목록만, 누르면 그 항목의 세부 화면으로 들어간다 */
+function openSettingsPage(key: string | null) {
+  $("#settingsHome").hidden = !!key;
+  document.querySelectorAll<HTMLElement>(".setting-page").forEach((p) => (p.hidden = p.dataset.page !== key));
+  $<HTMLInputElement>("#apikey").value = settings.get().apiKey;
+  renderAi();
+  renderPin();
+  if (key === "font") renderFonts();
+  renderSettingsHome();
+  window.scrollTo({ top: 0 });
+}
+
+function renderSettingsHome() {
+  const s = settings.get();
+  const every = s.batchEvery ?? DEFAULT_BATCH;
+  $("#sumFont").textContent = fontById(s.font).label;
+  $("#sumAi").textContent = s.apiKey
+    ? every
+      ? `새 메모 ${every === 1 ? "적을 때마다" : `${every}개마다`} 정리 · 기다리는 메모 ${pendingForAI().length}개`
+      : "직접 할 때만 정리"
+    : "키를 넣으면 Claude가 정리해요";
+  $("#sumVault").textContent = vault.hasPin() ? `잠금 번호 설정됨 · 메모 ${store.all().filter((m) => m.locked).length}개` : "잠금 번호를 정하지 않았어요";
+  $("#sumNotify").textContent = "Notification" in window ? (Notification.permission === "granted" ? "켜짐" : "꺼짐") : "이 브라우저는 지원하지 않아요";
+  $("#sumShare").textContent = "공유 메뉴 · 위젯에서 바로 담는 방법";
+  $("#sumNative").textContent = "위젯 · 공유 메뉴 · 액션 버튼";
+  $("#sumBackup").textContent = `메모 ${store.all().length}개 · 파일로 저장하고 불러오기`;
+}
+
+$("#settings").addEventListener("click", (e) => {
+  const t = (e.target as HTMLElement).closest<HTMLElement>("[data-open],[data-back]");
+  if (!t) return;
+  openSettingsPage(t.dataset.open ?? null);
+});
 document.querySelectorAll<HTMLElement>(".tabs button").forEach((b) => b.addEventListener("click", () => show(b.dataset.tab!)));
 $("#openSettings").addEventListener("click", () => show($("#settings").classList.contains("on") ? "home" : "settings"));
 
-// ---------- 냅킨: 어느 화면에서든 아래에 떠 있는 입력칸 ----------
+// ---------- 냅킨: 평소엔 접힌 버튼(FAB), 누르면 펼쳐지는 입력칸 ----------
 
 const napkin = $<HTMLTextAreaElement>("#napkin");
 const dock = $<HTMLFormElement>("#capture");
+const fab = $<HTMLButtonElement>("#fab");
+const DRAFT_KEY = "napkin.draft.v1";
+const reduceMotion = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+/** 저장하기 전 쓰던 글은 접어도, 앱을 껐다 켜도 남아 있다 */
+function saveDraft() {
+  try {
+    localStorage.setItem(DRAFT_KEY, napkin.value);
+  } catch {
+    /* 무시 */
+  }
+  $("#fabDot").hidden = !napkin.value.trim();
+}
+try {
+  napkin.value = localStorage.getItem(DRAFT_KEY) ?? "";
+} catch {
+  /* 무시 */
+}
+
+function openNapkin() {
+  if (!dock.hidden) return;
+  dock.hidden = false;
+  fab.hidden = true;
+  // 키보드가 뜨려면 탭한 순간 바로 포커스해야 한다 (iOS)
+  napkin.focus({ preventScroll: true });
+  napkin.setSelectionRange(napkin.value.length, napkin.value.length);
+  autoGrow();
+  renderRemindRow();
+  if (!reduceMotion()) {
+    dock.classList.remove("folding");
+    dock.classList.add("unfolding");
+  }
+}
+
+function foldNapkin() {
+  if (dock.hidden || document.body.classList.contains("widget")) return;
+  saveDraft();
+  napkin.blur();
+  $("#seriesPick").hidden = true;
+  const done = () => {
+    dock.hidden = true;
+    dock.classList.remove("folding");
+    fab.hidden = false;
+  };
+  if (reduceMotion()) return done();
+  dock.classList.remove("unfolding");
+  dock.classList.add("folding");
+  $(".napkin").addEventListener("animationend", done, { once: true });
+}
+
+fab.addEventListener("click", openNapkin);
+$("#foldBtn").addEventListener("click", foldNapkin);
+dock.addEventListener("animationend", () => dock.classList.remove("unfolding"));
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && !dock.hidden) foldNapkin();
+});
 let remindChoice = "";
 /** 연재 버튼으로 고른 연재. 저장할 때 첫 줄에 "이름 N회차"를 붙인다 */
 let seriesChoice: { name: string; n: number; unit: string } | null = null;
@@ -139,6 +229,7 @@ $("#remindChips").addEventListener("click", (e) => {
 napkin.addEventListener("input", () => {
   autoGrow();
   renderRemindRow();
+  saveDraft();
 });
 // Enter는 줄바꿈. 컴퓨터에서는 ⌘/Ctrl+Enter로 저장
 napkin.addEventListener("keydown", (e) => {
@@ -171,6 +262,7 @@ dock.addEventListener("submit", async (e) => {
     );
   }
   napkin.value = "";
+  saveDraft();
   remindChoice = "";
   seriesChoice = null;
   $<HTMLInputElement>("#remindAt").value = "";
@@ -178,6 +270,18 @@ dock.addEventListener("submit", async (e) => {
   renderSeriesTag();
   renderRemindRow();
   autoGrow();
+  foldNapkin();
+});
+
+// 메모 고치기: 저장
+document.addEventListener("click", async (e) => {
+  const id = (e.target as HTMLElement).closest<HTMLElement>("[data-edit-save]")?.dataset.editSave;
+  if (!id) return;
+  const text = editing.draft;
+  if (!text.trim()) return toast("내용을 적어주세요");
+  editing.id = "";
+  if (!(await editMemo(id, text))) editing.id = id;
+  render();
 });
 
 // ---------- 지금 챙길 것 (리마인드 · 기한) ----------
@@ -372,12 +476,15 @@ function render() {
     recent
       .slice(0, widget ? 3 : 20)
       .map((m) => memoItem(m))
-      .join("") || `<li class="empty">아래 냅킨에 떠오른 걸 적어 보세요.<br />할 일, 링크, 생각을 알아서 나눠 둘게요.</li>`;
+      .join("") || `<li class="empty">오른쪽 아래 냅킨을 눌러 떠오른 걸 적어 보세요.<br />할 일, 링크, 생각을 알아서 나눠 둘게요.</li>`;
   renderDue();
   renderTodos();
   renderLinks();
   renderDrawer();
-  if ($("#settings").classList.contains("on")) renderAi();
+  if ($("#settings").classList.contains("on")) {
+    renderAi();
+    renderSettingsHome();
+  }
 }
 onRerender(render);
 store.subscribe(render);
@@ -389,7 +496,12 @@ vault.subscribe(() => {
 // ---------- 시작 옵션: ?widget, ?q=…, 공유(title/text/url) ----------
 
 const params = new URLSearchParams(location.search);
-if (params.has("widget")) document.body.classList.add("widget");
+if (params.has("widget")) {
+  document.body.classList.add("widget");
+  dock.hidden = false;
+  fab.hidden = true;
+}
+saveDraft();
 if (import.meta.env.VITE_DEMO) seedDemo();
 applyFont(settings.get().font);
 render();
