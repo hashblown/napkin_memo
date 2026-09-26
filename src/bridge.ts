@@ -4,7 +4,7 @@ type Handler = { postMessage(message: unknown): void };
 declare global {
   interface Window {
     webkit?: { messageHandlers?: { napkin?: Handler } };
-    napkinNative?: { ingest(payload: NativePayload): Promise<void> };
+    napkinNative?: { ingest(payload: NativePayload): Promise<void>; authCallback(url: string): Promise<void> };
   }
 }
 

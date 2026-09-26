@@ -12,6 +12,7 @@ import { renderLinks } from "./views/links";
 import { renderDrawer } from "./views/drawer";
 import { initNative } from "./native";
 import { FONTS, applyFont, fontById, loadPreviews } from "./fonts";
+import { initSync, signIn, signOut, syncNow, syncState, onSyncChange, type Provider } from "./sync";
 
 const PRESETS = ["글이 막힐 때", "기획 회의 전", "새 프로젝트를 시작할 때", "마음이 지칠 때", "산책하며 생각 정리", "아무거나 꺼내줘"];
 const DAY = 86_400_000;
@@ -43,7 +44,67 @@ function openSettingsPage(key: string | null) {
   window.scrollTo({ top: 0 });
 }
 
+function ago(ts: number | null) {
+  if (!ts) return "아직 안 했어요";
+  const min = Math.floor((Date.now() - ts) / 60000);
+  return min < 1 ? "방금" : min < 60 ? `${min}분 전` : min < 1440 ? `${Math.floor(min / 60)}시간 전` : new Date(ts).toLocaleDateString("ko-KR");
+}
+
+function renderAccount() {
+  const st = syncState();
+  const area = $("#accountArea");
+  $("#sumAccount").textContent = !st.configured
+    ? "이 기기에만 저장 중"
+    : st.user
+      ? `${st.user.name || st.user.email} · ${st.status === "error" ? "동기화 오류" : st.status === "syncing" ? "동기화 중…" : `동기화 ${ago(st.lastSyncAt)}`}`
+      : "로그인하면 다른 기기와 함께 써요";
+  if (!st.configured) {
+    area.innerHTML = `<p>지금은 메모가 <b>이 기기에만</b> 저장돼요. 동기화 서버가 아직 연결되지 않았어요.</p>
+      <p class="small">서버를 연결하면 Google · 카카오로 로그인해서 여러 기기에서 같은 메모를 쓸 수 있어요.</p>`;
+    return;
+  }
+  if (!st.user) {
+    area.innerHTML = `<p>로그인하면 메모가 서버에도 저장돼서, 폰을 바꾸거나 다른 기기에서도 그대로 이어서 쓸 수 있어요.
+      로그인하지 않아도 이 기기에는 계속 저장돼요.</p>
+      <div class="login-buttons">
+        <button type="button" class="login google" data-login="google"><span class="logo">G</span>Google로 계속하기</button>
+        <button type="button" class="login kakao" data-login="kakao"><span class="logo">💬</span>카카오로 계속하기</button>
+      </div>
+      <p class="small">처음 로그인하면 이 기기에 있던 메모도 함께 올라가요. 보관함 메모는 암호화된 채로만 올라가요.</p>`;
+    return;
+  }
+  const provider = st.user.provider === "kakao" ? "카카오" : st.user.provider === "google" ? "Google" : st.user.provider;
+  area.innerHTML = `<div class="account-card">
+      <b>${esc(st.user.name || st.user.email || "로그인됨")}</b>
+      <span class="small">${esc([provider, st.user.email].filter(Boolean).join(" · "))}</span>
+    </div>
+    <p>마지막 동기화: <b>${st.status === "syncing" ? "하는 중…" : ago(st.lastSyncAt)}</b>${st.pending ? ` · 올릴 변경 ${st.pending}개` : ""}</p>
+    ${st.status === "error" ? `<p class="error">동기화하지 못했어요: ${esc(st.error ?? "")}</p>` : ""}
+    <div class="row start wrap">
+      <button type="button" class="primary" data-sync-now ${st.status === "syncing" ? "disabled" : ""}>지금 동기화</button>
+      <button type="button" data-logout>로그아웃</button>
+    </div>
+    <p class="small">로그아웃해도 이 기기의 메모는 남아 있어요. API 키 같은 설정은 기기마다 따로예요.</p>`;
+}
+
+$("#accountArea").addEventListener("click", async (e) => {
+  const t = (e.target as HTMLElement).closest<HTMLElement>("[data-login],[data-sync-now],[data-logout]");
+  if (!t) return;
+  try {
+    if (t.dataset.login) await signIn(t.dataset.login as Provider);
+    if (t.dataset.syncNow !== undefined) toast((await syncNow()) ? "동기화했어요" : "동기화하지 못했어요");
+    if (t.dataset.logout !== undefined) {
+      await signOut();
+      toast("로그아웃했어요. 이 기기의 메모는 그대로예요");
+    }
+  } catch (err) {
+    toast(`로그인하지 못했어요: ${err instanceof Error ? err.message : err}`);
+  }
+});
+onSyncChange(() => $("#settings").classList.contains("on") && renderAccount());
+
 function renderSettingsHome() {
+  renderAccount();
   const s = settings.get();
   const every = s.batchEvery ?? DEFAULT_BATCH;
   $("#sumFont").textContent = fontById(s.font).label;
@@ -522,6 +583,12 @@ if (quick) {
 
 // 아이폰 앱 안이면 위젯·알림과 연결
 initNative();
+
+// 로그인 동기화 (서버가 연결돼 있을 때만)
+void initSync();
+
+// 브라우저가 저장 공간을 정리할 때 이 앱의 메모는 지우지 않도록 요청
+void navigator.storage?.persist?.().catch(() => false);
 
 // 리마인드: 1분마다, 그리고 앱으로 돌아올 때 확인
 function tick() {

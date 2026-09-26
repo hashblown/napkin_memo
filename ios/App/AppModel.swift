@@ -58,6 +58,14 @@ final class AppModel: ObservableObject {
             SharedStore.items = items
             WidgetCenter.shared.reloadAllTimelines()
             Notifications.schedule(items)
+        case "oauth":
+            guard let raw = msg["url"] as? String, let url = URL(string: raw) else { return }
+            AuthSession.shared.start(url: url) { [weak self] callback in
+                guard let callback, let web = self?.webView,
+                      let data = try? JSONEncoder().encode(callback.absoluteString),
+                      let arg = String(data: data, encoding: .utf8) else { return }
+                web.evaluateJavaScript("window.napkinNative && window.napkinNative.authCallback(\(arg)); void 0")
+            }
         case "calendar":
             guard let title = msg["title"] as? String, let at = msg["at"] as? Double else { return }
             CalendarPresenter.present(title: title, date: Date(timeIntervalSince1970: at / 1000), url: msg["url"] as? String, note: msg["note"] as? String)

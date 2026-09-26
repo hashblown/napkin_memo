@@ -84,6 +84,7 @@
         <div id="settingsHome">
           <h2 class="settings-title">설정</h2>
           <ul class="settings-list">
+            <li><button type="button" data-open="account"><span class="s-text"><span class="s-title">계정 · 동기화</span><span class="s-sub" id="sumAccount"></span></span><span class="chev" aria-hidden="true">›</span></button></li>
             <li><button type="button" data-open="font"><span class="s-text"><span class="s-title">글씨체</span><span class="s-sub" id="sumFont"></span></span><span class="chev" aria-hidden="true">›</span></button></li>
             <li><button type="button" data-open="ai"><span class="s-text"><span class="s-title">AI 정리 <span id="aiStatus" class="pill"></span></span><span class="s-sub" id="sumAi"></span></span><span class="chev" aria-hidden="true">›</span></button></li>
             <li><button type="button" data-open="vault"><span class="s-text"><span class="s-title">비밀 보관함</span><span class="s-sub" id="sumVault"></span></span><span class="chev" aria-hidden="true">›</span></button></li>
@@ -92,6 +93,12 @@
             <li class="native-only"><button type="button" data-open="native"><span class="s-text"><span class="s-title">앱 밖에서 적기</span><span class="s-sub" id="sumNative"></span></span><span class="chev" aria-hidden="true">›</span></button></li>
             <li><button type="button" data-open="backup"><span class="s-text"><span class="s-title">백업 · 기기 옮기기</span><span class="s-sub" id="sumBackup"></span></span><span class="chev" aria-hidden="true">›</span></button></li>
           </ul>
+        </div>
+
+        <div class="setting-page" data-page="account" hidden>
+          <button type="button" class="back" data-back>‹ 설정</button>
+          <h2>계정 · 동기화</h2>
+          <div id="accountArea"></div>
         </div>
 
         <div class="setting-page" data-page="font" hidden>

@@ -31,6 +31,8 @@ export interface Memo {
   cipher?: string;
   /** 사용자가 '할 일 아님'으로 고친 메모 → AI가 할 일을 다시 만들지 않는다 */
   noTodo?: boolean;
+  /** 마지막으로 바뀐 시각 (동기화에서 더 최근 것이 이긴다) */
+  updatedAt?: number;
 }
 
 /** 사용자가 고친 분류. 로컬 규칙과 AI에 예시로 쓰인다 */
@@ -56,6 +58,7 @@ export interface Todo {
   /** 기한 없는 할 일에 대한 '첫 행동' 제안 (캐시) */
   step?: string;
   snoozedUntil?: number;
+  updatedAt?: number;
 }
 
 export interface Settings {
@@ -73,6 +76,21 @@ const CATS_KEY = "napkin.categories.v1";
 const LOCKED_CATS_KEY = "napkin.lockedCategories.v1";
 const SERIES_KEY = "napkin.series.v1";
 const CORRECTIONS_KEY = "napkin.corrections.v1";
+const DIRTY_KEY = "napkin.sync.dirty.v1";
+const DELETED_KEY = "napkin.sync.deleted.v1";
+const META_TIME_KEY = "napkin.sync.metaTime.v1";
+
+/** 동기화에 쓰는 이름: "memo:<id>", "todo:<id>", "meta:<이름>" */
+export type SyncKey = string;
+export const META_NAMES = ["userCats", "lockedCats", "seriesDefs", "corrections", "vault"] as const;
+export type MetaName = (typeof META_NAMES)[number];
+export interface SyncRecord {
+  kind: "memo" | "todo" | "meta";
+  id: string;
+  data: unknown;
+  updated_at: number;
+  deleted: boolean;
+}
 
 export const VAULT = "보관함";
 
@@ -101,6 +119,18 @@ let lockedCats: string[] = read<string[]>(LOCKED_CATS_KEY, [VAULT]);
 /** 사용자가 만든 연재 (아직 기록이 없어도 유지) */
 let seriesDefs: { name: string; unit: string }[] = read(SERIES_KEY, []);
 let corrections: Correction[] = read(CORRECTIONS_KEY, []);
+/** 서버에 아직 안 올린 변경 */
+let dirty = new Set<SyncKey>(read<SyncKey[]>(DIRTY_KEY, []));
+/** 지운 항목 (다른 기기에도 지우라고 알리기 위해) */
+let deleted: Record<SyncKey, number> = read(DELETED_KEY, {});
+let metaTime: Partial<Record<MetaName, number>> = read(META_TIME_KEY, {});
+/** 바깥(보관함 등)이 관리하는 동기화 항목 */
+const externalMeta: Partial<Record<MetaName, { get(): unknown; set(v: unknown): void }>> = {};
+
+function touch(key: SyncKey) {
+  dirty.add(key);
+  if (key.startsWith("meta:")) metaTime[key.slice(5) as MetaName] = Date.now();
+}
 const listeners = new Set<() => void>();
 
 function commit() {
@@ -110,7 +140,44 @@ function commit() {
   write(LOCKED_CATS_KEY, lockedCats);
   write(SERIES_KEY, seriesDefs);
   write(CORRECTIONS_KEY, corrections);
+  write(DIRTY_KEY, [...dirty]);
+  write(DELETED_KEY, deleted);
+  write(META_TIME_KEY, metaTime);
   listeners.forEach((fn) => fn());
+}
+
+function metaValue(name: MetaName): unknown {
+  switch (name) {
+    case "userCats":
+      return userCats;
+    case "lockedCats":
+      return lockedCats;
+    case "seriesDefs":
+      return seriesDefs;
+    case "corrections":
+      return corrections;
+    default:
+      return externalMeta[name]?.get() ?? null;
+  }
+}
+
+function setMetaValue(name: MetaName, v: unknown) {
+  switch (name) {
+    case "userCats":
+      userCats = v as string[];
+      break;
+    case "lockedCats":
+      lockedCats = v as string[];
+      break;
+    case "seriesDefs":
+      seriesDefs = v as typeof seriesDefs;
+      break;
+    case "corrections":
+      corrections = v as Correction[];
+      break;
+    default:
+      externalMeta[name]?.set(v);
+  }
 }
 
 export const store = {
@@ -133,17 +200,26 @@ export const store = {
       useWhen: [],
       classifiedBy: "pending",
       ...init,
+      updatedAt: Date.now(),
     };
     memos = [memo, ...memos];
+    touch(`memo:${memo.id}`);
     commit();
     return memo;
   },
   update(id: string, patch: Partial<Memo>) {
-    memos = memos.map((m) => (m.id === id ? { ...m, ...patch } : m));
+    memos = memos.map((m) => (m.id === id ? { ...m, ...patch, updatedAt: Date.now() } : m));
+    touch(`memo:${id}`);
     commit();
   },
   remove(id: string) {
     memos = memos.filter((m) => m.id !== id);
+    deleted[`memo:${id}`] = Date.now();
+    touch(`memo:${id}`);
+    for (const t of todos.filter((t) => t.memoId === id && !t.done)) {
+      deleted[`todo:${t.id}`] = Date.now();
+      touch(`todo:${t.id}`);
+    }
     todos = todos.filter((t) => t.memoId !== id || t.done);
     commit();
   },
@@ -157,24 +233,37 @@ export const store = {
   isLockedCat: (c: string) => lockedCats.includes(c),
   setCatLocked(c: string, locked: boolean) {
     lockedCats = locked ? [...new Set([...lockedCats, c])] : lockedCats.filter((x) => x !== c);
+    touch("meta:lockedCats");
     commit();
   },
   addCategory(name: string) {
     if (!userCats.includes(name)) userCats = [...userCats, name];
+    touch("meta:userCats");
     commit();
   },
   /** 이름 바꾸기. 이미 있는 이름이면 두 분류가 합쳐진다 */
   renameCategory(from: string, to: string) {
     userCats = [...new Set(userCats.map((c) => (c === from ? to : c)))];
     lockedCats = [...new Set(lockedCats.map((c) => (c === from ? to : c)))];
-    memos = memos.map((m) => (m.category === from ? { ...m, category: to } : m));
+    memos = memos.map((m) => {
+      if (m.category !== from) return m;
+      touch(`memo:${m.id}`);
+      return { ...m, category: to, updatedAt: Date.now() };
+    });
+    touch("meta:userCats");
+    touch("meta:lockedCats");
     commit();
   },
   /** 여러 변경을 한 번에 적용 (정리 제안 수락). 잠긴 메모와 잠긴 분류는 건드리지 않는다 */
   apply(newCats: string[], moves: { id: string; to: string }[]) {
     userCats = [...new Set([...userCats, ...newCats])];
     const to = new Map(moves.filter((m) => !lockedCats.includes(m.to)).map((m) => [m.id, m.to]));
-    memos = memos.map((m) => (to.has(m.id) && !m.locked ? { ...m, category: to.get(m.id)!, classifiedBy: "ai" } : m));
+    memos = memos.map((m) => {
+      if (!to.has(m.id) || m.locked) return m;
+      touch(`memo:${m.id}`);
+      return { ...m, category: to.get(m.id)!, classifiedBy: "ai", updatedAt: Date.now() };
+    });
+    touch("meta:userCats");
     commit();
   },
 
@@ -183,6 +272,7 @@ export const store = {
   addCorrection(c: Omit<Correction, "at">) {
     // 잠긴 메모 내용은 예시로도 남기지 않는다 (호출하는 쪽에서 걸러서 온다)
     corrections = [{ ...c, text: c.text.slice(0, 300), at: Date.now() }, ...corrections].slice(0, 100);
+    touch("meta:corrections");
     commit();
   },
 
@@ -191,6 +281,8 @@ export const store = {
   addSeries(name: string, unit: string) {
     if (!seriesDefs.some((s) => s.name === name)) seriesDefs = [...seriesDefs, { name, unit }];
     if (!userCats.includes(name)) userCats = [...userCats, name];
+    touch("meta:seriesDefs");
+    touch("meta:userCats");
     commit();
   },
   seriesList() {
@@ -216,18 +308,105 @@ export const store = {
   // ---------- 할 일 ----------
   todos: () => todos,
   addTodo(t: Omit<Todo, "id" | "createdAt" | "done">) {
-    const todo: Todo = { id: crypto.randomUUID(), createdAt: Date.now(), done: false, ...t };
+    const todo: Todo = { id: crypto.randomUUID(), createdAt: Date.now(), done: false, ...t, updatedAt: Date.now() };
     todos = [todo, ...todos];
+    touch(`todo:${todo.id}`);
     commit();
     return todo;
   },
   updateTodo(id: string, patch: Partial<Todo>) {
-    todos = todos.map((t) => (t.id === id ? { ...t, ...patch } : t));
+    todos = todos.map((t) => (t.id === id ? { ...t, ...patch, updatedAt: Date.now() } : t));
+    touch(`todo:${id}`);
     commit();
   },
   removeTodo(id: string) {
     todos = todos.filter((t) => t.id !== id);
+    deleted[`todo:${id}`] = Date.now();
+    touch(`todo:${id}`);
     commit();
+  },
+
+  // ---------- 동기화 ----------
+  sync: {
+    /** 보관함처럼 store 밖에서 관리하는 항목을 동기화에 연결한다 */
+    registerMeta(name: MetaName, io: { get(): unknown; set(v: unknown): void }) {
+      externalMeta[name] = io;
+    },
+    markMeta(name: MetaName) {
+      touch(`meta:${name}`);
+      commit();
+    },
+    hasPending: () => dirty.size > 0,
+    /** 처음 로그인했을 때: 이 기기의 모든 것을 올릴 대상으로 */
+    markAll() {
+      memos.forEach((m) => dirty.add(`memo:${m.id}`));
+      todos.forEach((t) => dirty.add(`todo:${t.id}`));
+      META_NAMES.forEach((n) => {
+        dirty.add(`meta:${n}`);
+        metaTime[n] ??= 0;
+      });
+      commit();
+    },
+    pending(): SyncRecord[] {
+      const out: SyncRecord[] = [];
+      for (const key of dirty) {
+        const [kind, ...rest] = key.split(":");
+        const id = rest.join(":");
+        if (kind === "memo" || kind === "todo") {
+          const item = kind === "memo" ? memos.find((m) => m.id === id) : todos.find((t) => t.id === id);
+          if (item) out.push({ kind, id, data: item, updated_at: item.updatedAt ?? item.createdAt, deleted: false });
+          else if (deleted[key]) out.push({ kind, id, data: null, updated_at: deleted[key], deleted: true });
+        } else if (kind === "meta") {
+          const name = id as MetaName;
+          out.push({ kind: "meta", id: name, data: metaValue(name), updated_at: metaTime[name] ?? 0, deleted: false });
+        }
+      }
+      return out;
+    },
+    /** 서버에 올라간 것은 변경 목록에서 뺀다 (올리는 사이 또 바뀐 건 남긴다) */
+    pushed(records: SyncRecord[]) {
+      for (const r of records) {
+        const key = `${r.kind}:${r.id}`;
+        const now = r.kind === "meta" ? (metaTime[r.id as MetaName] ?? 0) : r.kind === "memo" ? memos.find((m) => m.id === r.id)?.updatedAt : todos.find((t) => t.id === r.id)?.updatedAt;
+        if (r.deleted || (now ?? 0) <= r.updated_at) dirty.delete(key);
+      }
+      commit();
+    },
+    /** 서버에서 받은 것을 합친다: 더 최근에 바뀐 쪽이 이긴다 */
+    applyRemote(records: SyncRecord[]): number {
+      let changed = 0;
+      for (const r of records) {
+        const key = `${r.kind}:${r.id}`;
+        if (r.kind === "meta") {
+          const name = r.id as MetaName;
+          if ((metaTime[name] ?? -1) >= r.updated_at || r.data == null) continue;
+          setMetaValue(name, r.data);
+          metaTime[name] = r.updated_at;
+          dirty.delete(key);
+          changed++;
+          continue;
+        }
+        const list: { id: string; updatedAt?: number; createdAt: number }[] = r.kind === "memo" ? memos : todos;
+        const local = list.find((x) => x.id === r.id);
+        const localTime = local ? (local.updatedAt ?? local.createdAt) : (deleted[key] ?? -1);
+        if (localTime >= r.updated_at) continue;
+        if (r.deleted) {
+          if (r.kind === "memo") memos = memos.filter((m) => m.id !== r.id);
+          else todos = todos.filter((t) => t.id !== r.id);
+          deleted[key] = r.updated_at;
+        } else if (r.kind === "memo") {
+          const m = { ...(r.data as Memo), kind: (r.data as Memo).kind ?? "note" };
+          memos = local ? memos.map((x) => (x.id === r.id ? m : x)) : [...memos, m].sort((a, b) => b.createdAt - a.createdAt);
+        } else {
+          const t = r.data as Todo;
+          todos = local ? todos.map((x) => (x.id === r.id ? t : x)) : [t, ...todos];
+        }
+        dirty.delete(key);
+        changed++;
+      }
+      if (changed) commit();
+      return changed;
+    },
   },
 
   // ---------- 백업 ----------
@@ -242,6 +421,10 @@ export const store = {
     todos = [...(data.todos ?? []).filter((t) => !knownT.has(t.id)), ...todos];
     userCats = [...new Set([...userCats, ...(data.userCats ?? [])])];
     lockedCats = [...new Set([...lockedCats, ...(data.lockedCats ?? [])])];
+    fresh.forEach((m) => touch(`memo:${m.id}`));
+    todos.forEach((t) => !knownT.has(t.id) && touch(`todo:${t.id}`));
+    touch("meta:userCats");
+    touch("meta:lockedCats");
     commit();
     return fresh.length;
   },

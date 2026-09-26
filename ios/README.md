@@ -43,6 +43,11 @@
 - **무료 Apple ID**: 설치한 앱이 **7일 뒤 만료**된다(다시 ▶︎ 실행하면 됨). App Group 같은 기능이 무료 팀에서 제한되면 서명 단계에서 오류가 난다.
 - **Apple Developer Program(연 $99)**: 만료 걱정 없이 쓰려면 **Product › Archive → Distribute App → TestFlight**. 앱스토어 공개가 아니라 나만 설치한다.
 
+## 로그인 동기화
+
+설정 › 계정 · 동기화의 Google · 카카오 로그인은 앱 안 웹 화면 대신 **아이폰 시스템 로그인 창**으로 열리고, `napkin://auth-callback` 으로 돌아온다.
+Supabase의 Redirect URLs에 `napkin://auth-callback` 이 있어야 한다([`docs/sync-setup.md`](../docs/sync-setup.md)).
+
 ## 알아둘 점
 
 - 앱 안 데이터는 **이 앱의 저장소**에 있다. 사파리/홈 화면 웹앱에 적어둔 게 있다면 거기서 **설정 › 내보내기** → 앱에서 **가져오기**.

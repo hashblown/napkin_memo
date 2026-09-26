@@ -6,6 +6,7 @@ import { store } from "./store";
 import { save } from "./pipeline";
 import { toast } from "./ui";
 import { isNative, postNative, type NativePayload } from "./bridge";
+import { completeNativeAuth } from "./sync";
 
 const PROCESSED_KEY = "napkin.native.processed.v1";
 const DAY = 86_400_000;
@@ -84,7 +85,16 @@ async function ingest(p: NativePayload) {
 export function initNative() {
   if (!isNative()) return;
   document.body.classList.add("native");
-  window.napkinNative = { ingest };
+  window.napkinNative = {
+    ingest,
+    async authCallback(url: string) {
+      try {
+        await completeNativeAuth(url);
+      } catch (e) {
+        toast(`로그인하지 못했어요: ${e instanceof Error ? e.message : e}`);
+      }
+    },
+  };
   let timer: ReturnType<typeof setTimeout> | undefined;
   const sync = () => postNative({ type: "snapshot", items: widgetItems() });
   store.subscribe(() => {

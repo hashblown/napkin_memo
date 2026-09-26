@@ -108,6 +108,7 @@ export const vault = {
       privateKey: await aesEncrypt(pk, pkcs8),
     };
     localStorage.setItem(META_KEY, JSON.stringify(m));
+    store.sync.markMeta("vault");
     privateKey = await crypto.subtle.importKey("pkcs8", pkcs8, RSA, false, ["decrypt"]);
     for (const memo of store.all()) if (memo.locked && !memo.cipher) await vault.seal(memo);
     touch();
@@ -165,6 +166,18 @@ export const vault = {
     return true;
   },
 };
+
+// 다른 기기에서도 같은 잠금 번호로 보관함을 열 수 있게, 잠금 정보(개인키는 잠금 번호로 암호화된 채)를 동기화한다
+store.sync.registerMeta("vault", {
+  get: () => meta(),
+  set(v) {
+    const local = meta();
+    const remote = v as VaultMeta;
+    // 이 기기에 이미 다른 잠금 정보가 있으면 덮어쓰지 않는다 (그 키로 잠근 메모를 못 열게 되므로)
+    if (local && local.publicKey !== remote.publicKey) return;
+    localStorage.setItem(META_KEY, JSON.stringify(remote));
+  },
+});
 
 // 앱이 가려지면(다른 앱으로 전환 등) 바로 잠근다
 document.addEventListener("visibilitychange", () => {
